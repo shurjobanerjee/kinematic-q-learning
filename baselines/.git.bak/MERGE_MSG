@@ -1,0 +1,5 @@
+Merge branch 'master' of https://github.com/openai/baselines
+
+# Conflicts:
+#	baselines/common/cmd_util.py
+#	baselines/run.py

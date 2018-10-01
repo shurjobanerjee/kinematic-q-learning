@@ -35,7 +35,7 @@ def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='
     if env == 'Arm':
         command = """
                    {} 
-                   mpirun -np 19
+                   mpirun -np 2
 		   python -m baselines.run 
                    --alg=her 
                    --env=FetchReachAct-v1 
@@ -47,7 +47,7 @@ def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='
     elif env == "Hand":
         command = """
                    {} 
-                   mpirun -np 19
+                   mpirun -np 2
                    python -m baselines.run 
                    --alg=her 
                    --env=HandReach-v0 
