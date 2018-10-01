@@ -7,10 +7,10 @@ import mujoco_py
 def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='2d', hidden=16, identifier='', **kwargs):
     
     if env == 'Arm':
-        model = mujoco_py.load_model_from_path("/home/shurjo/local_projects/kinematic-q-learning/gym/gym/envs/robotics/assets/fetch/reach-actuated.xml")
+        model = mujoco_py.load_model_from_path("/z/home/shurjo/projects/kinematic-q-learning/gym/gym/envs/robotics/assets/fetch/reach-actuated.xml")
         n_arms = len(model.actuator_names)
     elif env == "Hand":
-        model = mujoco_py.load_model_from_path("/home/shurjo/local_projects/kinematic-q-learning/gym/gym/envs/robotics/assets/hand/reach.xml")
+        model = mujoco_py.load_model_from_path("/z/home/shurjo/projects/kinematic-q-learning/gym/gym/envs/robotics/assets/hand/reach.xml")
         n_arms = len(model.actuator_names)
 
     # Governs whether to show a test simulation
