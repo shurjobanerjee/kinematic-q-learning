@@ -35,21 +35,25 @@ def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='
     if env == 'Arm':
         command = """
                    {} 
-                   python -m baselines.run 
+                   mpirun -np 19
+		   python -m baselines.run 
                    --alg=her 
                    --env=FetchReachAct-v1 
                    --num_timesteps={} 
                    --n_arms {}
+	 	   --num_env=2 
                    {} 
                    """.format(store_logs, num_timesteps, n_arms, play)
     elif env == "Hand":
         command = """
                    {} 
+                   mpirun -np 19
                    python -m baselines.run 
                    --alg=her 
                    --env=HandReach-v0 
                    --num_timesteps={} 
                    --n_arms {}
+	           --num_env=2 
                    {} 
                    """.format(store_logs, num_timesteps, n_arms, play)
     else:
