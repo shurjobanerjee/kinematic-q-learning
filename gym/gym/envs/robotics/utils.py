@@ -181,7 +181,7 @@ class ObsReshaper:
 
     def linearize(self, **kwargs):
         obs = [np.asarray(kwargs[k]).flatten() for k in self.keys]
-        obs = np.asarray(obs).flatten()
+        obs = np.concatenate(obs, 0)
         return obs
     
     def unlinearize(self, obs):
@@ -190,6 +190,6 @@ class ObsReshaper:
         """
         obs_dict = {}
         for i,k in enumerate(self.keys):
-            obs_dict[k] = tf.reshape(obs[...,self.ndxs[i-1]:self.ndxs[i]], self.shapes[k])
+            obs_dict[k] = tf.reshape(obs[...,self.ndxs[i]:self.ndxs[i+1]], self.shapes[k])
         return obs_dict
 

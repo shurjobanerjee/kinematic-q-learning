@@ -143,7 +143,6 @@ class DDPG(object):
         feed = {
             policy.o_tf : o.reshape(-1, self.dimo),
             policy.g_tf : g.reshape(-1, self.dimg),
-            policy.ag_tf: ag.reshape(-1, self.dimg),
             policy.u_tf : np.zeros((o.size // self.dimo, self.dimu), dtype=np.float32)
         }
 

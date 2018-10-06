@@ -9,7 +9,8 @@ Requirement:
 pyglet >= 1.2.4
 numpy >= 1.12.1
 """
-import numpy as np
+import autograd.numpy as np
+from autograd import jacobian
 import pyglet
 import gym
 from gym import error, spaces
@@ -25,6 +26,17 @@ def box(obs):
 def goal_distance_2d(goal_a, goal_b):
     assert goal_a.shape == goal_b.shape
     return np.linalg.norm(goal_a - goal_b, axis=-1)
+
+def for_kin(thetas, ls):
+    """
+    Separate forward kinematics to easily take gradients wrt theta 
+    """
+    fk = np.asarray([np.sum(ls*np.cos(np.cumsum(thetas))), 
+                     np.sum(ls*np.sin(np.cumsum(thetas)))])
+    return fk
+
+def rcumsum(x):
+    return np.cumsum(x[::-1])[::-1] 
 
 class ArmEnv(gym.GoalEnv):
     dt = 1 # refresh rate
@@ -63,8 +75,7 @@ class ArmEnv(gym.GoalEnv):
         self.distance_threshold = distance_threshold
 
         self.visible = visible
-
-
+        
         # Required for Goal-Env
         self.action_space = spaces.Box(-1., 1., shape=(n_arms,), dtype='float32')
         obs = self._get_obs()
@@ -77,19 +88,19 @@ class ArmEnv(gym.GoalEnv):
         # Observation indices required by model
 
 
-    def get_shaped_observations(self):
+    def get_obs_dict(self):
         """Couples together observations"""
         # Actual observation
-        angles = self.arm_info[:,1].copy()
+        angles = self.arm_info[:,:1].copy()
         # Additional information
-        joint_lengths = self.arm_info[:, 0]
+        jacp = self.jacp()
         # End effector 
         return dict(observation=angles, 
-                    joint_lengths=joint_lengths, 
+                    jacp=jacp, 
                     end_eff=self.arm_info[-1,2:4].copy())
 
     def preprocess_observation_ndxs(self):
-        obs, jp = self.get_shaped_observations()
+        obs, jp = self.get_obs_dict()
         return np.prod(obs.shape), jp.shape
 
 
@@ -122,7 +133,7 @@ class ArmEnv(gym.GoalEnv):
         achieved_goal = obs['achieved_goal'][:2].copy()
         desired_goal  = obs['desired_goal'][:2].copy()
 
-        info = dict(is_success=self._is_success(achieved_goal, desired_goal))
+        #info = dict(is_success=self._is_success(achieved_goal, desired_goal))
         info = dict(is_success=goal_distance_2d(achieved_goal, desired_goal))
         reward = self.compute_reward(achieved_goal, desired_goal, info)
 
@@ -150,15 +161,32 @@ class ArmEnv(gym.GoalEnv):
         self.forward_kinematics()
     
     def forward_kinematics(self):
-        armrad = 0
-        center_coord = 0
-        for i in range(self.n_arms):
-            armrad +=  self.arm_info[i, 1]
-            armdx_dy = np.array([self.arm_info[i, 0] * np.cos(armrad),
-                                 self.arm_info[i, 0] * np.sin(armrad)])
-            self.arm_info[i, 2:4] = center_coord + armdx_dy
-            center_coord = self.arm_info[i, 2:4]
+        ls     = self.arm_info[:, 0]
+        thetas = self.arm_info[:, 1]
         
+        # Functional form of forward kinematics
+        self.arm_info[:, 2:4] = \
+                np.asarray([np.cumsum(ls*np.cos(np.cumsum(thetas))), 
+                            np.cumsum(ls*np.sin(np.cumsum(thetas)))]).T
+
+        # armrad = 0
+        # center_coord = 0
+        # for i in range(self.n_arms):
+        #     armrad +=  self.arm_info[i, 1]
+        #     armdx_dy = np.array([self.arm_info[i, 0] * np.cos(armrad),
+        #                          self.arm_info[i, 0] * np.sin(armrad)])
+        #     self.arm_info[i, 2:4] = center_coord + armdx_dy
+        #     center_coord = self.arm_info[i, 2:4]
+    
+    def jacp(self):
+        """
+        Analytical form of derivative of end-effector wrt angles
+        """
+        ls     = self.arm_info[:, 0]
+        thetas = self.arm_info[:, 1]
+        return np.asarray([-rcumsum(ls*np.sin(rcumsum(thetas))), 
+                           rcumsum(ls*np.cos(rcumsum(thetas)))]).T
+    
     def reset(self):
         # Desired Goal
         self.point_info[:] = self.random_point()
@@ -187,13 +215,14 @@ class ArmEnv(gym.GoalEnv):
         pyglet.clock.set_fps_limit(fps)
 
     def _get_obs(self):
-        # Observations
-        observation = self.get_shaped_observations()
+        # Observations (includes jacobian of end-effector)
+        observation = self.get_obs_dict()
         # Linearize observation
         if self.reshaper is None:
             self.reshaper = ObsReshaper(**observation)
         observation = self.reshaper.linearize(**observation)
-
+        
+        # Achieved and desired goals
         achieved_goal = self.arm_info[-1][2:4].copy()
         desired_goal  = self.point_info.copy()
         
