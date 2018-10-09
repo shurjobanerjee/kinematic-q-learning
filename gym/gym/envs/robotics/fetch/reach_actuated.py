@@ -18,7 +18,7 @@ MODEL_XML_PATH = os.path.join('fetch', 'reach-actuated.xml')
 
 
 class FetchReachActEnv(fetch_env.FetchEnv, utils.EzPickle):
-    def __init__(self, reward_type='sparse', **kwargs):
+    def __init__(self, reward_type='sparse', model_xml_path=None, **kwargs):
         # Set env o_ndx
         self.reshaper = None
 
@@ -27,11 +27,12 @@ class FetchReachActEnv(fetch_env.FetchEnv, utils.EzPickle):
             'robot0:slide1': 0.48,
             'robot0:slide2': 0.0,
         }
+        MODEL_XML_PATH = model_xml_path if model_xml_path is not None else MODEL_XML_PATH
         model = mujoco_py.load_model_from_path(fullpath_from_rel(MODEL_XML_PATH))
         fetch_env.FetchEnv.__init__(
             self, MODEL_XML_PATH, has_object=False, block_gripper=True, n_substeps=20,
             gripper_extra_height=0.2, target_in_the_air=True, target_offset=0.0,
-            obj_range=0.15, target_range=0.15, distance_threshold=0.05,
+            obj_range=0.15, target_range=0.15, distance_threshold=0.20,
             initial_qpos=initial_qpos, reward_type=reward_type,
             n_actions=len(model.actuator_names), **kwargs)
         utils.EzPickle.__init__(self)

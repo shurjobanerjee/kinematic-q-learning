@@ -1,5 +1,6 @@
 import sys
 import multiprocessing
+import os
 import os.path as osp
 import gym
 import gym_arm 
@@ -15,6 +16,8 @@ from baselines.common.tf_util import get_session
 from baselines import logger
 from importlib import import_module
 
+import imageio
+import cv2
 #import cProfile, pstats
 
 try:
@@ -224,9 +227,14 @@ def main(args):
 
         state = model.initial_state if hasattr(model, 'initial_state') else None
         dones = np.zeros((1,))
-
+        
+        num_eps = 0
         episode_rew = 0
-        while True:
+        images = []
+        downsize = True
+        iterator = -1
+        while num_eps < 30: #True:
+            iterator += 1
             if state is not None:
                 actions, _, state, _ = model.step(obs,S=state, M=dones)
             else:
@@ -235,20 +243,49 @@ def main(args):
             obs, rew, done, _ = env.step(actions)
             episode_rew += rew[0]
             env.render()
+
+            image = env.render('rgb_array')
+            #FIXME Convert ColorBuffer object to numpy array directly 
+            if type(image) is not np.ndarray:
+                iname = '/tmp/tmp{}.png'.format(iterator)
+                if os.path.isfile(iname): 
+                    os.remove(iname)
+                image.save(iname)
+                image = cv2.cvtColor(cv2.imread(iname), cv2.COLOR_BGR2RGB)
+                downsize = False
+            
+            # Append images to make GIF
+            images.append(image)
+
             done = done.any() if isinstance(done, np.ndarray) else done
             if done:
                 print(f'episode_rew={episode_rew}')
                 episode_rew = 0
                 obs = env.reset()
+                num_eps += 1
+
+        ################################################################
+        # Make a gif
+        ################################################################
+        if 'save_path' in args:
+            gname = args.save_path.replace('.model','.gif')
+        elif 'load_path' in extra_args:
+            gname = extra_args['load_path'].replace('.model','.gif')
+        else:
+            gname = 'tmp.gif'
+
+        if downsize:
+            images = [cv2.resize(i, None, fx=.25, fy=.25) for i in images]
+        
+        # Save the gif at a frame rate of 30
+        print("Saving a gif to: {}".format(gname))
+        imageio.mimsave(gname, images,duration=1/30.)
 
     env.close()
 
     return model
 
+
 if __name__ == '__main__':
-    #profiler = cProfile.Profile()    # create profiler
-    #profiler.enable()                # start profiling
     main(sys.argv)
-    #profiler.disable()
-    #profiler.dump_stats('baseline.prof')
 

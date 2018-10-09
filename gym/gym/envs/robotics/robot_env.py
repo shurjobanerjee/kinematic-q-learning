@@ -96,7 +96,8 @@ class RobotEnv(gym.GoalEnv):
         if mode == 'rgb_array':
             self._get_viewer().render()
             # window size used for old mujoco-py:
-            width, height = 500, 500
+            #width, height = 500, 500
+            width, height = 1920, 1080
             data = self._get_viewer().read_pixels(width, height, depth=False)
             # original image is upside-down, so flip it
             return data[::-1, :, :]
