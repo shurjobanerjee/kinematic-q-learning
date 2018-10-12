@@ -245,6 +245,7 @@ def main(args):
             env.render()
 
             image = env.render('rgb_array')
+            
             #FIXME Convert ColorBuffer object to numpy array directly 
             if type(image) is not np.ndarray:
                 iname = '/tmp/tmp{}.png'.format(iterator)

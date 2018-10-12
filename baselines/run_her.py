@@ -3,7 +3,7 @@ import keyword2cmdline
 import subprocess
 import mujoco_py
 import os
-from os.path import join, abspath
+from os.path import join, abspath, basename
 
 ENVS = dict(Fetch   = 'FetchReachAct-v1',
             Fetch2D = 'FetchReachAct-v1',
@@ -12,6 +12,8 @@ ENVS = dict(Fetch   = 'FetchReachAct-v1',
            )
 
 
+#echo "allocated node"; cat $PBS_NODEFILE
+#echo "GPU allocated"; cat $PBS_GPUFILE
 def makedirs(folder):
     if not os.path.isdir(folder):
         os.makedirs(folder)
@@ -19,17 +21,15 @@ def makedirs(folder):
 @keyword2cmdline.command
 def main(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
         hidden=16, identifier='', normalized=False, parallel=False,
-        save_path=False,  constraints=False, collisions=False, load_path=False,
-        relative_goals=True, **kwargs):
+        save_path=False,  constraints=False, collisions=False, 
+        relative_goals=True, qsub=False,**kwargs):
     
-    # Governs whether to show a test simulation
-    play = "" if not play else "--play"
-
-    # Differentiate the method
-    method = 'baseline' if parts is 'None' else 'our'
     
     # Constant hyperparams 
-    method = "{}-rel_goals-{}-normalized-{}-hidden-{}".format(method, relative_goals, normalized, hidden)
+    mtype = "rel_goals-{}-normalized-{}-hidden-{}".format(relative_goals, normalized, hidden)
+    
+    # Differentiate the method
+    method = 'baseline' if parts is 'None' else 'ours'
 
     # Model file name changes based on params
     model_xml_path = None
@@ -65,7 +65,7 @@ def main(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
         method = '{}-{}'.format(method, identifier)
 
     # Folder to store logs in
-    logs = "logs/{}/{}".format(env, method)
+    logs = "logs/{}/{}/{}".format(env, mtype, method)
     makedirs(logs)
     
     # Run in parallel on lgns
@@ -87,16 +87,27 @@ def main(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
     kwargs['relative_goals'] = relative_goals
     kwargs['normalized'] = normalized
     kwargs['model_xml_path'] = model_xml_path
+    kwargs['save_path'] = save_path
     
-    if not load_path:  
-        kwargs['save_path'] = save_path
-    else:
-        kwargs['load_path'] = save_path
+    # To a normal looking sentence
+    train_command = make_command(logs, parallel, **kwargs)
+    # Run the code locally or on the cluster
+    print(train_command,'\n')
+    train = make_executable_script(logs, train_command, True)
+    subprocess.call('./{}'.format(train), shell=True)
+    
+    # Save test command to visualize on retinene later
+    kwargs.pop('save_path')
+    kwargs['load_path'] = save_path + " --play"
+    # To a normal looking sentence
+    test_command = make_command(logs, parallel, **kwargs)
+    test = make_executable_script(logs, test_command, False)
+    #subprocess.call('./{}'.format(test), shell=True)
 
+def make_command(logs, parallel, **kwargs):
     kwargs_args = ' '.join(['--{} {}'.format(k,f) for k, f in kwargs.items()])
     
-    
-    # Run the code
+    # Run the method
     command = """
                DISPLAY=:0
                OPENAI_LOGDIR={} OPENAI_LOG_FORMAT=csv,stdout
@@ -104,16 +115,35 @@ def main(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
                python -m baselines.run 
                --alg=her 
                {}
-               {}
-               """.format(logs, parallel, kwargs_args, play)
+               """.format(logs, parallel, kwargs_args)
 
+    # Save the plots
 
-    # To a normal looking sentence
-    command = " ".join(command.split())
-        
-    # Run the code locally or on the cluster
-    print(command,'\n')
-    subprocess.call(command, shell=True)
+    return " ".join(command.split())
+
+PBS="""#PBS -N {}             # Any name to identify your job
+#PBS -j oe                    # Join error and output files for convinience
+#PBS -l walltime=200:00:00    # Keep walltime big enough to finish the job
+#PBS -l nodes=1:ppn=10:gpus=1 # nodes requested: Processor per node: gpus requested
+#PBS -S /bin/bash             # Shell to use
+#PBS -m abe                   # Mail to <user>@umich.edu on abort, begin and end
+#PBS -V                       # Pass current environment variables to the script
+#PBS -e pbs_output 
+#PBS -o pbs_output"""
+
+def make_executable_script(logs, command, train=True):
+    pbs = "{}\n\n".format(PBS.format(basename(logs).strip()))
+    shebang = "\n{}\n".format("#!/bin/bash")
+    sourcer = 'source {} \n'.format(abspath('../setup.sh'))
+    fname = join(logs, 'train.sh' if train else 'test.sh')
+    with open(fname, 'w') as f:
+        f.write(pbs)
+        f.write(shebang)
+        f.write(sourcer)
+        f.write(command)
+    subprocess.call("chmod +x {}".format(fname), shell=True)
+
+    return fname
 
 if __name__ == "__main__":
     main()

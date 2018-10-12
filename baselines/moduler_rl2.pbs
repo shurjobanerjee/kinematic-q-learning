@@ -1,0 +1,19 @@
+#PBS -N ModularRL             # Any name to identify your job
+#PBS -j oe                    # Join error and output files for convinience
+#PBS -l walltime=200:00:00    # Keep walltime big enough to finish the job
+#PBS -l nodes=1:ppn=20:gpus=2 # nodes requested: Processor per node: gpus requested
+#PBS -S /bin/bash             # Shell to use
+#PBS -m abe                   # Mail to <user>@umich.edu on abort, begin and end
+#PBS -V                       # Pass current environment variables to the script
+#PBS -e pbs_output 
+#PBS -o pbs_output
+
+#echo "allocated node"; cat $PBS_NODEFILE
+#echo "GPU allocated"; cat $PBS_GPUFILE
+
+PYTHONPATH=""
+cd "$PBS_O_WORKDIR"
+echo "$PBS_O_WORKDIR"
+
+source ../setup.sh
+python run_her.py --num_timesteps 15000  --env Arm  --hidden 256 --save_path theres256_small_u
