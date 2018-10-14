@@ -3,6 +3,9 @@ from gym.envs.robotics.fetch.slide import FetchSlideEnv
 from gym.envs.robotics.fetch.pick_and_place import FetchPickAndPlaceEnv
 from gym.envs.robotics.fetch.push import FetchPushEnv
 from gym.envs.robotics.fetch.reach import FetchReachEnv
+# Fetch-Reach Actuated
+from gym.envs.robotics.fetch.reach_actuated import FetchReachActEnv
+
 
 from gym.envs.robotics.hand.reach import HandReachEnv
 from gym.envs.robotics.hand.manipulate import HandBlockEnv

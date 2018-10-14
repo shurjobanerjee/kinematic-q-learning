@@ -324,7 +324,15 @@ for reward_type in ['sparse', 'dense']:
         entry_point='gym.envs.robotics:FetchReachEnv',
         kwargs=kwargs,
         max_episode_steps=50,
+    )    
+    
+    register(
+        id='FetchReachAct{}-v1'.format(suffix),
+        entry_point='gym.envs.robotics:FetchReachActEnv',
+        kwargs=kwargs,
+        max_episode_steps=50,
     )
+
 
     register(
         id='FetchPush{}-v1'.format(suffix),

@@ -1,6 +1,6 @@
 import numpy as np
-
 from gym import error
+
 try:
     import mujoco_py
 except ImportError as e:
@@ -20,12 +20,17 @@ def robot_get_obs(sim):
     return np.zeros(0), np.zeros(0)
 
 
-def ctrl_set_action(sim, action):
-    """For torque actuators it copies the action into mujoco ctrl field.
-    For position actuators it sets the target relative to the current qpos.
-    """
-    if sim.model.nmocap > 0:
-        _, action = np.split(action, (sim.model.nmocap * 7, ))
+def get_joint_xposes(sim):
+    bodyname2xpos = dict(zip(sim.model.body_names, sim.data.body_xpos))
+    joint_names = sim.model.actuator_names
+    joint_ids = [sim.model.joint_name2id(name) for name in joint_names]
+    # if above thing produces error then actuator_names are not same as joint_names
+    joint_poses = [sim.data.body_xpos[sim.model.jnt_bodyid[i]] for i in joint_ids]
+    joint_qpos = [sim.data.qpos[i] for i in joint_ids]
+    return joint_poses, joint_qpos
+
+
+def full_ctrl_set_action(sim, action):
     if sim.data.ctrl is not None:
         for i in range(action.shape[0]):
             if sim.model.actuator_biastype[i] == 0:
@@ -33,6 +38,15 @@ def ctrl_set_action(sim, action):
             else:
                 idx = sim.model.jnt_qposadr[sim.model.actuator_trnid[i, 0]]
                 sim.data.ctrl[i] = sim.data.qpos[idx] + action[i]
+
+
+def ctrl_set_action(sim, action):
+    """For torque actuators it copies the action into mujoco ctrl field.
+    For position actuators it sets the target relative to the current qpos.
+    """
+    if sim.model.nmocap > 0:
+        _, action = np.split(action, (sim.model.nmocap * 7, ))
+    full_ctrl_set_action(sim, action)
 
 
 def mocap_set_action(sim, action):
@@ -47,10 +61,8 @@ def mocap_set_action(sim, action):
     if sim.model.nmocap > 0:
         action, _ = np.split(action, (sim.model.nmocap * 7, ))
         action = action.reshape(sim.model.nmocap, 7)
-
         pos_delta = action[:, :3]
         quat_delta = action[:, 3:]
-
         reset_mocap2body_xpos(sim)
         sim.data.mocap_pos[:] = sim.data.mocap_pos + pos_delta
         sim.data.mocap_quat[:] = sim.data.mocap_quat + quat_delta

@@ -27,7 +27,7 @@ def box(obs):
 def goal_distance(goal_a, goal_b):
     assert goal_a.shape == goal_b.shape
 
-    return np.linalg.norm(goal_a[...,:2] - goal_b[...,:2], axis=-1)
+    return np.linalg.norm(goal_a - goal_b, axis=-1)
 
 class ArmEnv(gym.GoalEnv):
     action_bound = [-1, 1]
@@ -57,7 +57,6 @@ class ArmEnv(gym.GoalEnv):
         self.reward_type = reward_type
         self.distance_threshold = distance_threshold
 
-        self.relative = Params.parts
         self.visible = visible
 
         # Required for Goal-Env
@@ -102,7 +101,12 @@ class ArmEnv(gym.GoalEnv):
         # Returns
         obs = self._get_obs()
         done = False
+        
+        # Info - is succes + joint poses
         info = dict(is_success=goal_distance(obs['achieved_goal'], obs['desired_goal']))
+        info['end_eff'] = self.arm_info[:, 2:4].copy()
+        
+        # Reward computation
         reward = self.compute_reward(obs['achieved_goal'], obs['desired_goal'], info)
 
         self.last_info = info
@@ -152,18 +156,18 @@ class ArmEnv(gym.GoalEnv):
     def set_fps(self, fps=30):
         pyglet.clock.set_fps_limit(fps)
 
-    def _get_obs(self, relative=True):
+    def _get_obs(self):
         # return the distance (dx, dy) between arm finger point with blue point
         obs = {}
         arm_end = self.arm_info[-1, 2:4] # End-effector position
         obs['achieved_goal'] = arm_end
         obs['desired_goal'] = self.point_info
 
-        observation = np.zeros(self.n_arms * 2)
+        observation = np.zeros((self.n_arms, 2))
         for i in range(0, self.n_arms):
             armrad = self.arm_info[i, 1]
-            observation[2*i]   = np.sin(armrad)
-            observation[2*i+1] = np.cos(armrad) 
+            observation[i, 0] = np.sin(armrad)
+            observation[i, 1] = np.cos(armrad) 
         
         obs['observation'] = observation
 

@@ -189,13 +189,13 @@ def configure_dims(params):
     obs, _, _, info = env.step(env.action_space.sample())
 
     dims = {
-        'o': obs['observation'].shape[0],
-        'u': env.action_space.shape[0],
-        'g': obs['desired_goal'].shape[0],
+        'o': obs['observation'].shape,
+        'u': env.action_space.shape,
+        'g': obs['desired_goal'].shape,
     }
     for key, value in info.items():
         value = np.array(value)
         if value.ndim == 0:
             value = value.reshape(1)
-        dims['info_{}'.format(key)] = value.shape[0]
+        dims['info_{}'.format(key)] = value.shape
     return dims

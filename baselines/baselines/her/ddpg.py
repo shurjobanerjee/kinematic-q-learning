@@ -11,10 +11,20 @@ from baselines.her.normalizer import Normalizer
 from baselines.her.replay_buffer import ReplayBuffer
 from baselines.common.mpi_adam import MpiAdam
 from baselines.common import tf_util
-
+from pprint import pprint as pp
 
 def dims_to_shapes(input_dims):
-    return {key: tuple([val]) if val > 0 else tuple() for key, val in input_dims.items()}
+    #return {key: val if isinstance(val, tuple) elif tuple([val]) if val > 0 else tuple() for key, val in input_dims.items()}
+    
+    out_dict = {}
+    for key, val in input_dims.items():
+        if isinstance(val, tuple):
+            out_dict[key] = val
+        elif val > 0:
+            out_dict[key] = tuple([val])
+        else:
+            out_dict[key] = tuple()
+    return out_dict
 
 
 global DEMO_BUFFER #buffer for demonstrations
@@ -75,8 +85,8 @@ class DDPG(object):
         # Prepare staging area for feeding data to the model.
         stage_shapes = OrderedDict()
         for key in sorted(self.input_dims.keys()):
-            if key.startswith('info_'):
-                continue
+            #if key.startswith('info_'):
+            #    continue
             stage_shapes[key] = (None, *input_shapes[key])
         for key in ['o', 'g']:
             stage_shapes[key + '_2'] = stage_shapes[key]
@@ -313,7 +323,7 @@ class DDPG(object):
         return res
 
     def _create_network(self, reuse=False):
-        logger.info("Creating a DDPG agent with action space %d x %s..." % (self.dimu, self.max_u))
+        logger.info("Creating a DDPG agent with action space %d x %s..." % (np.prod(self.dimu), self.max_u))
         self.sess = tf_util.get_session()
 
         # running averages
