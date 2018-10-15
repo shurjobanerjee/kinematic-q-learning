@@ -11,20 +11,10 @@ from baselines.her.normalizer import Normalizer
 from baselines.her.replay_buffer import ReplayBuffer
 from baselines.common.mpi_adam import MpiAdam
 from baselines.common import tf_util
-from pprint import pprint as pp
+
 
 def dims_to_shapes(input_dims):
-    #return {key: val if isinstance(val, tuple) elif tuple([val]) if val > 0 else tuple() for key, val in input_dims.items()}
-    
-    out_dict = {}
-    for key, val in input_dims.items():
-        if isinstance(val, tuple):
-            out_dict[key] = val
-        elif val > 0:
-            out_dict[key] = tuple([val])
-        else:
-            out_dict[key] = tuple()
-    return out_dict
+    return {key: tuple([val]) if val > 0 else tuple() for key, val in input_dims.items()}
 
 
 global DEMO_BUFFER #buffer for demonstrations
@@ -81,6 +71,7 @@ class DDPG(object):
         self.dimo = self.input_dims['o']
         self.dimg = self.input_dims['g']
         self.dimu = self.input_dims['u']
+        self.dime = self.input_dims['e']
 
         # Prepare staging area for feeding data to the model.
         stage_shapes = OrderedDict()
@@ -88,7 +79,7 @@ class DDPG(object):
             #if key.startswith('info_'):
             #    continue
             stage_shapes[key] = (None, *input_shapes[key])
-        for key in ['o', 'g']:
+        for key in ['o', 'g', 'e']:
             stage_shapes[key + '_2'] = stage_shapes[key]
         stage_shapes['r'] = (None,)
         self.stage_shapes = stage_shapes
@@ -107,8 +98,9 @@ class DDPG(object):
         # Configure the replay buffer.
         buffer_shapes = {key: (self.T-1 if key != 'o' else self.T, *input_shapes[key])
                          for key, val in input_shapes.items()}
-        buffer_shapes['g'] = tuple([buffer_shapes['g'][0]] + list(self.dimg))
-        buffer_shapes['ag'] = tuple([self.T] +  list(self.dimg))
+        buffer_shapes['g'] = (buffer_shapes['g'][0], self.dimg)
+        buffer_shapes['ag'] = (self.T, self.dimg)
+        buffer_shapes['e']  = (self.T, self.dime)
 
         buffer_size = (self.buffer_size // self.rollout_batch_size) * self.rollout_batch_size
         self.buffer = ReplayBuffer(buffer_shapes, buffer_size, self.T, self.sample_transitions)
@@ -131,11 +123,11 @@ class DDPG(object):
         return o, g
 
     def step(self, obs):
-        actions = self.get_actions(obs['observation'], obs['achieved_goal'], obs['desired_goal'])
+        actions = self.get_actions(obs['observation'], obs['achieved_goal'], obs['desired_goal'], obs['end_eff'])
         return actions, None, None, None
 
 
-    def get_actions(self, o, ag, g, noise_eps=0., random_eps=0., use_target_net=False,
+    def get_actions(self, o, ag, g, e, noise_eps=0., random_eps=0., use_target_net=False,
                     compute_Q=False):
         o, g = self._preprocess_og(o, ag, g)
         policy = self.target if use_target_net else self.main
@@ -145,9 +137,10 @@ class DDPG(object):
             vals += [policy.Q_pi_tf]
         # feed
         feed = {
-            policy.o_tf: o, #o.reshape(-1, self.dimo),
-            policy.g_tf: g, #g.reshape(-1, self.dimg),
-            policy.u_tf: np.zeros((o.size[0] // self.dimo[0], self.dimu), dtype=np.float32)
+            policy.o_tf: o.reshape(-1, self.dimo),
+            policy.g_tf: g.reshape(-1, self.dimg),
+            policy.u_tf: np.zeros((o.size // self.dimo, self.dimu), dtype=np.float32),
+            policy.e_tf: e.reshape(-1, self.dime)
         }
 
         ret = self.sess.run(vals, feed_dict=feed)
@@ -178,24 +171,27 @@ class DDPG(object):
         demo_data_info = demoData['info']
 
         for epsd in range(self.num_demo): # we initialize the whole demo buffer at the start of the training
-            obs, acts, goals, achieved_goals = [], [] ,[] ,[]
+            obs, acts, goals, achieved_goals, end_effs = [], [] ,[] ,[], []
             i = 0
             for transition in range(self.T - 1):
                 obs.append([demo_data_obs[epsd][transition].get('observation')])
                 acts.append([demo_data_acs[epsd][transition]])
                 goals.append([demo_data_obs[epsd][transition].get('desired_goal')])
                 achieved_goals.append([demo_data_obs[epsd][transition].get('achieved_goal')])
+                end_effs.append([demo_data_obs[epsd][transition].get('end_eff')])
                 for idx, key in enumerate(info_keys):
                     info_values[idx][transition, i] = demo_data_info[epsd][transition][key]
 
 
             obs.append([demo_data_obs[epsd][self.T - 1].get('observation')])
             achieved_goals.append([demo_data_obs[epsd][self.T - 1].get('achieved_goal')])
+            end_effs.append([demo_data_obs[epsd][self.T - 1].get('end_eff')])
 
             episode = dict(o=obs,
                            u=acts,
                            g=goals,
-                           ag=achieved_goals)
+                           ag=achieved_goals,
+                           e=end_effs)
             for key, value in zip(info_keys, info_values):
                 episode['info_{}'.format(key)] = value
 
@@ -323,7 +319,7 @@ class DDPG(object):
         return res
 
     def _create_network(self, reuse=False):
-        logger.info("Creating a DDPG agent with action space %d x %s..." % (np.prod(self.dimu), self.max_u))
+        logger.info("Creating a DDPG agent with action space %d x %s..." % (self.dimu, self.max_u))
         self.sess = tf_util.get_session()
 
         # running averages
@@ -357,6 +353,7 @@ class DDPG(object):
             target_batch_tf = batch_tf.copy()
             target_batch_tf['o'] = batch_tf['o_2']
             target_batch_tf['g'] = batch_tf['g_2']
+            target_batch_tf['e'] = batch_tf['e_2']
             self.target = self.create_actor_critic(
                 target_batch_tf, net_type='target', **self.__dict__)
             vs.reuse_variables()

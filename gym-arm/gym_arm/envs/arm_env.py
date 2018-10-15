@@ -66,6 +66,7 @@ class ArmEnv(gym.GoalEnv):
             desired_goal=box(obs['desired_goal']),
             achieved_goal=box(obs['achieved_goal']),
             observation=box(obs['observation']),
+            end_eff=box(obs['end_eff'])
         ))
 
     def random_point(self):
@@ -104,7 +105,6 @@ class ArmEnv(gym.GoalEnv):
         
         # Info - is succes + joint poses
         info = dict(is_success=goal_distance(obs['achieved_goal'], obs['desired_goal']))
-        info['end_eff'] = self.arm_info[:, 2:4].copy()
         
         # Reward computation
         reward = self.compute_reward(obs['achieved_goal'], obs['desired_goal'], info)
@@ -160,8 +160,8 @@ class ArmEnv(gym.GoalEnv):
         # return the distance (dx, dy) between arm finger point with blue point
         obs = {}
         arm_end = self.arm_info[-1, 2:4] # End-effector position
-        obs['achieved_goal'] = arm_end
-        obs['desired_goal'] = self.point_info
+        obs['achieved_goal'] = arm_end.reshape(-1)
+        obs['desired_goal'] = self.point_info.reshape(-1)
 
         observation = np.zeros((self.n_arms, 2))
         for i in range(0, self.n_arms):
@@ -169,7 +169,12 @@ class ArmEnv(gym.GoalEnv):
             observation[i, 0] = np.sin(armrad)
             observation[i, 1] = np.cos(armrad) 
         
-        obs['observation'] = observation
+        obs['observation'] = observation.copy().reshape(-1)
+
+        # Attach center coordinate
+        end_effs = np.concatenate([np.reshape(self.center_coord, (1,-1)), 
+                                   self.arm_info[:, 2:4]], 0)
+        obs['end_eff'] = end_effs.copy().reshape(-1)
 
         #if self.relative:
         #    for g in ['achieved_goal', 'desired_goal']:

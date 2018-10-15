@@ -6,9 +6,6 @@ import tensorflow as tf
 
 from baselines.her.util import reshape_for_broadcasting
 
-def reshape_for_nd(source, target):
-    shape = [1] + target.get_shape().as_list()[1:] 
-    return tf.reshape(tf.cast(source, target.dtype), shape)
 
 class Normalizer:
     def __init__(self, size, eps=1e-2, default_clip_range=np.inf, sess=None):
@@ -22,8 +19,7 @@ class Normalizer:
                 [-default_clip_range, default_clip_range]
             sess (object): the TensorFlow session to be used
         """
-        self.input_size = size
-        self.size = np.prod(size)
+        self.size = size
         self.eps = eps
         self.default_clip_range = default_clip_range
         self.sess = sess if sess is not None else tf.get_default_session()
@@ -41,7 +37,6 @@ class Normalizer:
         self.count_tf = tf.get_variable(
             initializer=tf.ones_initializer(), shape=self.local_count.shape, name='count',
             trainable=False, dtype=tf.float32)
-        # Mutli-dimensional inputs
         self.mean = tf.get_variable(
             initializer=tf.zeros_initializer(), shape=(self.size,), name='mean',
             trainable=False, dtype=tf.float32)
@@ -77,10 +72,8 @@ class Normalizer:
     def normalize(self, v, clip_range=None):
         if clip_range is None:
             clip_range = self.default_clip_range
-        #mean = reshape_for_broadcasting(reshape_for_nd(self.mean, v), v)
-        #std = reshape_for_broadcasting(reshape_for_nd(self.std, v),  v)
-        mean = reshape_for_nd(self.mean, v)
-        std  = reshape_for_nd(self.std, v)
+        mean = reshape_for_broadcasting(self.mean, v)
+        std = reshape_for_broadcasting(self.std,  v)
         return tf.clip_by_value((v - mean) / std, -clip_range, clip_range)
 
     def denormalize(self, v):
@@ -127,7 +120,6 @@ class Normalizer:
 
 class IdentityNormalizer:
     def __init__(self, size, std=1.):
-        import pdb; pdb.set_trace()
         self.size = size
         self.mean = tf.zeros(self.size, tf.float32)
         self.std = std * tf.ones(self.size, tf.float32)

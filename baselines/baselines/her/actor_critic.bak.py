@@ -27,7 +27,6 @@ class ActorCritic:
         self.o_tf = inputs_tf['o']
         self.g_tf = inputs_tf['g']
         self.u_tf = inputs_tf['u']
-        self.e_tf = inputs_tf['e']
 
         # Prepare inputs for actor and critic.
         o = self.o_stats.normalize(self.o_tf)
@@ -98,15 +97,15 @@ class ActorCriticParts:
         self.o_tf = inputs_tf['o']
         self.g_tf = inputs_tf['g']
         self.u_tf = inputs_tf['u']
-        self.e_tf = inputs_tf['e']
         
         o = self.o_stats.normalize(self.o_tf)
-        g = self.g_tf #self.g_stats.normalize(self.g_tf)
+        g = self.g_stats.normalize(self.g_tf)
         
         # Cool
+        
         u = narm_reshape(self.u_tf, n_arms)
         o = narm_reshape(o, n_arms)
-        e = narm_reshape(self.e_tf, n_arms+1)
+        effs = narm_reshape(inputs_tf['info_end_eff'], n_arms)
 
         # Outputs
         pi_tfs    = [None] * (n_arms-1) 
@@ -114,7 +113,7 @@ class ActorCriticParts:
         Q_tfs     = [None] * (n_arms-1) 
         
         for i in range(n_arms-1):
-            e_i = self.g_stats.normalize(linearize(e[:, i])) #FIXME
+            e_i = self.g_stats.normalize(effs[:, i]) #FIXME
             g_i = g - e_i
             
             if i < (n_arms - 2):
@@ -228,102 +227,3 @@ def total_params():
         #print(variable_parameters)
         total_parameters += variable_parameters
     print("Total Params: {}".format(total_parameters))
-#class ActorCriticParts:
-#    @store_args
-#    def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers,
-#                 **kwargs):
-#        """The actor-critic network and related training code.
-#
-#        Args:
-#            inputs_tf (dict of tensors): all necessary inputs for the network: the
-#                observation (o), the goal (g), and the action (u)
-#            dimo (int): the dimension of the observations
-#            dimg (int): the dimension of the goals
-#            dimu (int): the dimension of the actions
-#            max_u (float): the maximum magnitude of actions; action outputs will be scaled
-#                accordingly
-#            o_stats (baselines.her.Normalizer): normalizer for observations
-#            g_stats (baselines.her.Normalizer): normalizer for goals
-#            hidden (int): number of hidden units that should be used in hidden layers
-#            layers (int): number of hidden layers
-#        """
-#        self.o_tf = inputs_tf['o']
-#        self.g_tf = inputs_tf['g']
-#        self.u_tf = inputs_tf['u']
-#        
-#        o = self.o_stats.normalize(self.o_tf)
-#        g = self.g_stats.normalize(self.g_tf)
-#        
-#        o_l = self.o_tf.get_shape().as_list()[-1] 
-#        g_l = self.g_tf.get_shape().as_list()[-1]
-#        u_l = self.u_tf.get_shape().as_list()[-1]
-#        
-#        # N-Arms
-#        n_arms = Params.n_arms
-#        o_ndxs = list(split(list(range(o_l)), n_arms))
-#        g_ndxs = list(split(list(range(g_l)), n_arms-1))
-#        u_ndxs = list(split(list(range(u_l)), n_arms))
-#
-#        # Observations are per arms
-#        if Params.etype == 'Arm':
-#            df = 5 #Params.n_arms - 1
-#        else:
-#            df = Params.n_arms - 1
-#        os        = [None] * df
-#        gs        = [None] * df
-#        input_pis = [None] * df
-#        u_tfs     = [None] * df
-#        pi_tfs    = [None] * df
-#        input_Q_1 = [None] * df
-#        input_Q_2 = [None] * df
-#        Q_pi_tfs  = [None] * df
-#        Q_tfs     = [None] * df
-#
-#        
-#        for i in range(df):#len(g_ndxs)):
-#            if i < (df - 1):
-#                gs[i] = g[...,g_ndxs[i][0]:g_ndxs[i][-1]]
-#                os[i] = o[...,o_ndxs[i][0]:o_ndxs[i][-1]]
-#                u_tfs[i] = self.u_tf[...,u_ndxs[i][0]:u_ndxs[i][-1]]
-#            else:
-#                gs[i] = g[...,g_ndxs[i][0]:g_ndxs[i][-1]]
-#                #os[i] = o[...,o_ndxs[i][0]:o_ndxs[i+1][-1]]
-#                #u_tfs[i] = self.u_tf[...,u_ndxs[i][0]:u_ndxs[i+1][-1]]
-#                
-#                #gs[i] = g[...,g_ndxs[i][0]:]
-#                os[i] = o[...,o_ndxs[i][0]:]
-#                u_tfs[i] = self.u_tf[...,u_ndxs[i][0]:]
-#            
-#            # Network structure is the same once dim. is sorted out
-#            input_pis[i] = tf.concat(axis=1, values=[os[i], gs[i]])
-#            
-#            if i < (df - 1):
-#                hidden = solve_quadratic(self.hidden, self.layers, dimo, dimg, dimu, n_arms, 1)
-#                with tf.variable_scope('pi{}'.format(i)):
-#                    pi_tfs[i] = self.max_u * tf.tanh(nn(
-#                        input_pis[i], [hidden] * self.layers + [1]))
-#            else:
-#                u_last_dim = u_tfs[i].shape.as_list()[-1]
-#                hidden = solve_quadratic(self.hidden, self.layers, dimo, dimg, dimu, n_arms, u_last_dim)
-#                with tf.variable_scope('pi{}'.format(i)):
-#                    pi_tfs[i] = self.max_u * tf.tanh(nn(
-#                        input_pis[i], [hidden] * self.layers + [u_last_dim]))
-#            
-#            with tf.variable_scope('Q{}'.format(i)):
-#                # for policy training
-#                input_Q_1[i] = tf.concat(axis=1, values=[os[i], gs[i], pi_tfs[i] / self.max_u])
-#                Q_pi_tfs[i] = nn(input_Q_1[i], [hidden] * self.layers + [1])
-#                
-#                # for critic training
-#                input_Q_2[i] = tf.concat(axis=1, values=[os[i], gs[i], u_tfs[i] / self.max_u])
-#                Q_tfs[i] = nn(input_Q_2[i], [hidden] * self.layers + [1], reuse=True)
-#        
-#        with tf.variable_scope('pi'):
-#            self.pi_tf = tf.concat(axis=1, values=pi_tfs)
-#        
-#        with tf.variable_scope('Q'):
-#            # for policy training
-#            self.Q_pi_tf = sum(Q_pi_tfs)
-#            self.Q_tf    = sum(Q_tfs)
-#        
-#        total_params()

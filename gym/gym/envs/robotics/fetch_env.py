@@ -118,6 +118,7 @@ class FetchEnv(robot_env.RobotEnv):
             'observation': obs.copy(),
             'achieved_goal': achieved_goal.copy(),
             'desired_goal': self.goal.copy(),
+            'end_eff': self.goal.copy()
         }
 
     def _viewer_setup(self):

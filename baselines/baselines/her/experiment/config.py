@@ -7,6 +7,9 @@ from baselines.her.ddpg import DDPG
 from baselines.her.her_sampler import make_sample_her_transitions
 from baselines.bench.monitor import Monitor
 
+#FIXME
+from params import Params
+
 DEFAULT_ENV_PARAMS = {
     'FetchReach-v1': {
         'n_cycles': 10,
@@ -54,6 +57,8 @@ DEFAULT_PARAMS = {
     'aux_loss_weight':  0.0078, #Weight corresponding to the auxilliary loss also called the cloning loss
 }
 
+if Params.parts:
+    DEFAULT_PARAMS['network_class'] = 'baselines.her.actor_critic:ActorCriticParts'
 
 CACHED_ENVS = {}
 
@@ -189,13 +194,14 @@ def configure_dims(params):
     obs, _, _, info = env.step(env.action_space.sample())
 
     dims = {
-        'o': obs['observation'].shape,
-        'u': env.action_space.shape,
-        'g': obs['desired_goal'].shape,
+        'o': obs['observation'].shape[0],
+        'u': env.action_space.shape[0],
+        'g': obs['desired_goal'].shape[0],
+        'e': obs['end_eff'].shape[0],
     }
     for key, value in info.items():
         value = np.array(value)
         if value.ndim == 0:
             value = value.reshape(1)
-        dims['info_{}'.format(key)] = value.shape
+        dims['info_{}'.format(key)] = value.shape[0]
     return dims
