@@ -1,6 +1,13 @@
 """
 Environment for Robot Arm.
-Adapted from: https://morvanzhou.github.io/tutorials/
+You can customize this script in a way you want.
+
+View more on [莫烦Python] : https://morvanzhou.github.io/tutorials/
+
+
+Requirement:
+pyglet >= 1.2.4
+numpy >= 1.12.1
 """
 import numpy as np
 import pyglet
@@ -8,17 +15,15 @@ import gym
 from gym import error, spaces
 from gym.utils import seeding
 
+#FIXME
 from params import Params
 
-#pyglet.clock.set_fps_limit(10000)
 pyglet.clock.set_fps_limit(15)
-
-
 
 def box(obs):
     return spaces.Box(-np.inf, np.inf, shape=obs.shape, dtype='float32')
 
-def goal_distance(goal_a, goal_b):
+def goal_distance_2d(goal_a, goal_b):
     assert goal_a.shape == goal_b.shape
     return np.linalg.norm(goal_a - goal_b, axis=-1)
 
@@ -26,26 +31,36 @@ class ArmEnv(gym.GoalEnv):
     action_bound = [-1, 1]
     action_dim = 2
     state_dim = 7
-    dt = 1  # refresh rate
+    dt = 1 # refresh rate
     arml  = 300
     viewer = None
+    viewer_sol = None
     viewer_xy = (600, 600)
     get_point = False
     mouse_in = np.array([False])
     point_l = 15
     grab_counter = 0
 
-    def __init__(self, mode='hard', reward_type='sparse', distance_threshold=50, n_arms=3, visible=True,  wrapper_kwargs={}, **kwargs):
-        
-        self.mode = mode
-        n_arms = Params.n_arms #FIXME
+    def __init__(self, 
+                 reward_type='sparse', 
+                 distance_threshold=50, 
+                 n_arms=Params.n_arms, 
+                 visible=True,  
+                 wrapper_kwargs={}, 
+                 **kwargs):
+
         self.n_arms = n_arms
         self.arm_info = np.zeros((n_arms, 4))
-        for i in range(n_arms):
-            self.arm_info[i, 0] = self.arml // n_arms
-        self.point_info = np.array([250, 303])
-        self.point_info_init = self.point_info.copy()
+        self.arm_i = self.arml // n_arms
+        self.arm_info[:, 0] = self.arm_i
+        self.relative = Params.parts #FIXME
+        
         self.center_coord = np.array(self.viewer_xy)/2
+        
+        # Reset whhen initializing
+        self.point_info = np.zeros(2)
+        self.reset()
+        
         self.reward_type = reward_type
         self.distance_threshold = distance_threshold
 
@@ -60,11 +75,6 @@ class ArmEnv(gym.GoalEnv):
             observation=box(obs['observation']),
         ))
 
-    def random_point(self):
-        r = self.arml#np.random.random() * self.arml #self.arm_info[:, 0].sum()
-        t = np.random.random() * 2*np.pi
-        p = np.asarray([r*np.cos(t), r*np.sin(t)]) + self.center_coord
-        return p
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -72,72 +82,72 @@ class ArmEnv(gym.GoalEnv):
     
     def compute_reward(self, achieved_goal, goal, info):
         # Compute distance between goal and the achieved goal.
-        d = goal_distance(achieved_goal, goal)
+        d = goal_distance_2d(achieved_goal, goal)
         if self.reward_type == 'sparse':
             return -(d > self.distance_threshold).astype(np.float32)
         else:
             return -d
     
     def _is_success(self, achieved_goal, desired_goal):
-        d = goal_distance(achieved_goal, desired_goal)
+        d = goal_distance_2d(achieved_goal, desired_goal)
         return (d < self.distance_threshold).astype(np.float32)
     
-    def step(self, action):
-        # action = (node1 angular v, node2 angular v)
-        action = np.clip(action, *self.action_bound)
+    def step(self, action,):
         self.arm_info[:, 1] += action * self.dt
         self.arm_info[:, 1] %= np.pi * 2
-
         self.forward_kinematics()
 
         # Returns
         obs = self._get_obs()
         done = False
-        
-        # Info - is succes + joint poses
-        info = dict(is_success=goal_distance(obs['achieved_goal'], obs['desired_goal']))
-        
-        # Reward computation
-        reward = self.compute_reward(obs['achieved_goal'], obs['desired_goal'], info)
+
+        # Get achieved goal and desired goal in terms of global coordinates
+        achieved_goal = obs['achieved_goal'].copy()
+        desired_goal  = obs['desired_goal'].copy()
+
+        info = dict(is_success=goal_distance_2d(achieved_goal, desired_goal))
+        reward = self.compute_reward(achieved_goal, desired_goal, info)
 
         self.last_info = info
 
         return obs, reward, done, info
     
+    def random_point(self):
+        r = np.random.random() 
+        t = np.random.random() * 2*np.pi 
+        sr = np.sqrt(r) # Unbiased disk point sampling
+        p = np.asarray([sr*self.arml*np.cos(t), sr*self.arml*np.sin(t)]) + self.center_coord
+        return p
+
+    def random_kinematics(self):
+        # Random points that are achievable via the current arm configs
+        self.arm_info[:, 1] = 2 * np.pi * np.random.random(self.n_arms)
+        self.forward_kinematics()
+    
     def forward_kinematics(self):
-        armdx_dy = [None] * self.n_arms
-        for i in range(self.n_arms):
-            armrad = self.arm_info[i, 1]
-            armdx_dy[i] = np.array([self.arm_info[i, 0] * np.cos(armrad),
-                                 self.arm_info[i, 0] * np.sin(armrad)])
-        
         center_coord = self.center_coord
+        armrad = 0
         for i in range(self.n_arms):
-            self.arm_info[i, 2:4] = center_coord + armdx_dy[i]
+            armrad +=  self.arm_info[i, 1]
+            armdx_dy = np.array([self.arm_info[i, 0] * np.cos(armrad),
+                                 self.arm_info[i, 0] * np.sin(armrad)])
+            self.arm_info[i, 2:4] = center_coord + armdx_dy
             center_coord = self.arm_info[i, 2:4]
         
     def reset(self):
-        self.get_point = False
-        self.grab_counter = 0
-        self.mode = 'easy'
-        if self.mode == 'hard':
-            #pxy = np.clip(np.random.rand(2) * self.viewer_xy[0], 100, 300)
-            self.point_info[:] = self.random_point() #pxy
-        else:
-            armrad = np.random.rand(self.n_arms) * np.pi * 2
-            for i in range(self.n_arms):
-                self.arm_info[i, 1] = armrad[i]
-            self.forward_kinematics()
-        
-            self.point_info[:] = self.random_point() #pxy
-            #self.point_info[:] = self.point_info_init
+        # Desired Goal
+        self.point_info[:] = self.random_point()
+        # Starting orientation
+        self.random_kinematics()
         return self._get_obs()
 
     def render(self, mode='human'):
         if self.viewer is None:
             self.viewer = Viewer(*self.viewer_xy, self.arm_info, self.point_info, self.point_l, self.mouse_in, self.n_arms, self.visible)
+
         self.viewer.set_info(self.last_info)
         self.viewer.render()
+        
         if mode == 'rgb_array':
             return self.viewer.rgb_array()
 
@@ -148,34 +158,20 @@ class ArmEnv(gym.GoalEnv):
         pyglet.clock.set_fps_limit(fps)
 
     def _get_obs(self):
-        # return the distance (dx, dy) between arm finger point with blue point
-        obs = {}
-        arm_end = self.arm_info[-1, 2:4] # End-effector position
-        obs['achieved_goal'] = arm_end.reshape(-1)
-        obs['desired_goal'] = self.point_info.reshape(-1)
-
-        observation = np.zeros((self.n_arms, 2))
-        for i in range(0, self.n_arms):
-            armrad = self.arm_info[i, 1]
-            observation[i, 0] = np.sin(armrad)
-            observation[i, 1] = np.cos(armrad) 
         
-        obs['observation'] = observation.copy().reshape(-1)
-
-        # Attach center coordinate
-        #end_effs = np.concatenate([np.reshape(self.center_coord, (1,-1)), 
-        #                           self.arm_info[:, 2:4]], 0)
-        #obs['end_eff'] = end_effs.copy().reshape(-1)
-
-        #if self.relative:
-        #    for g in ['achieved_goal', 'desired_goal']:
-        #        obs_g = [obs[g]]
-        #        for i in range(self.n_arms-2):
-        #            obs_g += [obs[g] - self.arm_info[i, 2:4]]
-        #        obs[g] = np.concatenate(obs_g)
-        return obs
-
+        # Observations
+        observation = self.arm_info[:,1].copy()
+        # Global coordinates
+        achieved_goal = self.arm_info[-1][2:4].copy()
+        desired_goal  = self.point_info.copy()
         
+        return dict(
+                achieved_goal = achieved_goal,
+                desired_goal = desired_goal,
+                observation = observation, 
+            )
+
+
 
 class Viewer(pyglet.window.Window):
     color = {
@@ -216,6 +212,9 @@ class Viewer(pyglet.window.Window):
     def set_info(self, info):
         self.info = info
 
+    def set_arm_info(self, arm_info):
+        self.arm_info = arm_info
+
     def render(self):
         pyglet.clock.tick()
         self._update_arm()
@@ -248,9 +247,12 @@ class Viewer(pyglet.window.Window):
         arm_thick_rad = [None]*self.n_arms
         center_coord = self.center_coord
 
+        # Local to global angles
+        global_angles = np.cumsum(self.arm_info[:, 1])
+
         for i in range(self.n_arms):
             arm_coord[i] = (*center_coord, *(self.arm_info[i, 2:4]))
-            arm_thick_rad[i] = np.pi / 2 - self.arm_info[i, 1]
+            arm_thick_rad[i] = np.pi / 2 - global_angles[i]
         
             x01 = arm_coord[i][0] - np.cos(arm_thick_rad[i]) * self.bar_thc
             y01 = arm_coord[i][1] + np.sin(arm_thick_rad[i]) * self.bar_thc
