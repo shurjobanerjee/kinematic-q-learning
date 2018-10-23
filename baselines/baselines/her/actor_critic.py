@@ -91,33 +91,16 @@ class ActorCriticParts:
         # Reshape inputs for the number of arms
         u = narm_reshape(self.u_tf, n_arms)
         o = narm_reshape(o, n_arms)
-        if not learn_kin:
-            g = narm_reshape(g, n_arms)
-        else:
-            g = narm_reshape(g, 1)
-
-        # Outputs
-        pi_tfs    = [None] * (n_arms) 
-        Q_pi_tfs  = [None] * (n_arms) 
-        Q_tfs     = [None] * (n_arms) 
-        g_is      = [None] * (n_arms)
-        g_is[-1]  = g[:, -1]
         
-        for i in list(range(n_arms))[::-1]:
+        # Outputs
+        pi_tfs    = [None] * n_arms
+        Q_pi_tfs  = [None] * n_arms
+        Q_tfs     = [None] * n_arms
+        
+        for i in range(n_arms):
             o_i = o[:, i]
             u_i = u[:, i]
-            
-            if not learn_kin:
-                g_i = g[:, i]
-            else:
-                if i == (n_arms - 1):
-                    with tf.variable_scope('g{}'.format(i)):
-                        g_i = g_is[-1]
-                else:
-                    with tf.variable_scope('g{}'.format(i)):
-                        input_gi = tf.concat(axis=1, values=[g_is[i+1], o[:, i+1], u[:, i+1]])
-                        g_i = nn(input_gi, [hidden]*self.layers + [2])
-                        g_is[i] = g_i
+            g_i = g
             
             input_pis_i = tf.concat(axis=1, values=[o_i, g_i])
             
@@ -140,5 +123,11 @@ class ActorCriticParts:
         
         with tf.variable_scope('Q'):
             # for policy training
-            self.Q_pi_tf = sum(Q_pi_tfs)
-            self.Q_tf    = sum(Q_tfs)
+            #self.Q_pi_tf = sum(Q_pi_tfs)
+            #self.Q_tf    = sum(Q_tfs)
+
+            Q1 = tf.concat(axis=1, values=Q_pi_tfs)
+            self.Q_pi_tf = nn(Q1, [hidden] * self.layers + [1], reuse=tf.AUTO_REUSE)
+            
+            Q2 = tf.concat(axis=1, values=Q_tfs)
+            self.Q_tf   = nn(Q2, [hidden] * self.layers + [1], reuse=tf.AUTO_REUSE)

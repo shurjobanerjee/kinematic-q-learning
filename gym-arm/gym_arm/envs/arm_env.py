@@ -31,7 +31,7 @@ class ArmEnv(gym.GoalEnv):
 
     def __init__(self, 
                  reward_type='sparse', 
-                 distance_threshold=0.15, 
+                 distance_threshold=1/20, 
                  n_arms=2, 
                  visible=True,
                  achievable=True,
@@ -94,6 +94,7 @@ class ArmEnv(gym.GoalEnv):
         achieved_goal = obs['achieved_goal'].copy()
         desired_goal  = obs['desired_goal'].copy()
 
+        info = dict(is_success=self._is_success(achieved_goal, desired_goal))
         info = dict(is_success=goal_distance_2d(achieved_goal, desired_goal))
         reward = self.compute_reward(achieved_goal, desired_goal, info)
 
@@ -177,9 +178,10 @@ class Viewer(pyglet.window.Window):
         'background': [1]*3 + [1]
     }
     fps_display = pyglet.clock.ClockDisplay()
+    scale_fac = 400
     bar_thc = 5
-    point_l = 15/300.
-    viewer_xy = (600, 600)
+    point_l = 1/20
+    viewer_xy = (2*scale_fac, 2*scale_fac)
 
     def __init__(self, arm_info, point_info, n_arms, visible, desired_info):
         width, height = self.viewer_xy
@@ -198,7 +200,6 @@ class Viewer(pyglet.window.Window):
 
         self.n_arms = n_arms
         
-        self.scale_fac = min(width, height)//2
         self.center_coord = np.array((self.scale_fac, self.scale_fac))
         self.batch = pyglet.graphics.Batch()
         
