@@ -42,6 +42,7 @@ class ActorCritic:
             input_Q = tf.concat(axis=1, values=[o, g, self.u_tf / self.max_u])
             self._input_Q = input_Q  # exposed for tests
             self.Q_tf = nn(input_Q, [self.hidden] * self.layers + [1], reuse=True)
+        total_params()
 
 
 def narm_reshape(x, n_arm):
@@ -58,7 +59,7 @@ def solve_quadratic(H, l, o, g, u, n, x):
 class ActorCriticParts:
     @store_args
     def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers,
-                 n_arms, learn_kin=False, conn_type='sum', **kwargs):
+                 n_arms, learn_kin=False, conn_type='sums', **kwargs):
         """The actor-critic network and related training code.
 
         Args:
@@ -124,7 +125,7 @@ class ActorCriticParts:
 
         with tf.variable_scope('Q'):
             # for policy training
-            if conn_type == 'sum':
+            if conn_type == 'sums':
                 self.Q_pi_tf = sum(Q_pi_tfs)
                 self.Q_tf    = sum(Q_tfs)
             
@@ -134,6 +135,40 @@ class ActorCriticParts:
                 Q2 = tf.concat(axis=1, values=Q_tfs)
                 self.Q_tf   = nn(Q2, [hidden] * self.layers + [1], reuse=tf.AUTO_REUSE)
 
-            elif conn_type=='layered':
-                pass
+            elif conn_type == 'fc2':
+                Q1 = tf.concat(axis=1, values=Q_pi_tfs)
+                self.Q_pi_tf = nn(Q1, [hidden] * self.layers + [1], reuse=tf.AUTO_REUSE)
+                Q2 = tf.concat(axis=1, values=Q_tfs)
+                self.Q_tf   = nn(Q2, [hidden] * self.layers + [1], reuse=tf.AUTO_REUSE)
 
+            elif conn_type=='layered':
+                Q_i_1 = Q_pi_tfs[0]
+                Q_i_2 = Q_tfs[0]
+
+                for i in range(1, self.n_arms):
+                    Q_1 = tf.concat(axis=1, values=[Q_i_1, Q_pi_tfs[i]])
+                    Q_i_1 = nn(Q_1, [hidden] * self.layers + [1], reuse=tf.AUTO_REUSE)
+
+                    Q_2 = tf.concat(axis=1, values=[Q_i_2, Q_tfs[i]])
+                    Q_i_2 = nn(Q_2, [hidden] * self.layers + [1], reuse=tf.AUTO_REUSE)
+
+                self.Q_pi_tf = Q_i_1
+                self.Q_tf    = Q_i_2
+
+        total_params()
+
+
+def total_params():
+    total_parameters = 0
+    for variable in tf.trainable_variables():
+        # shape is an array of tf.Dimension
+        shape = variable.get_shape()
+        #print(shape)
+        #print(len(shape))
+        variable_parameters = 1
+        for dim in shape:
+            #print(dim)
+            variable_parameters *= dim.value
+        #print(variable_parameters)
+        total_parameters += variable_parameters
+    print("Total Params: {}".format(total_parameters))
