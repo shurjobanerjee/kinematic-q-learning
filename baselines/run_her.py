@@ -5,7 +5,8 @@ import subprocess
 @keyword2cmdline.command
 def main(num_timesteps=5000, play=False, log=True, parts=False, n_arms=2, env='2d', conn_type='sum'):
     play = "" if not play else "--play"
-    logs = "logs/{}/{}/{}".format(env, n_arms, 'baseline' if not parts else 'ours')
+    logs = "logs/{}/{}/{}".format(env, n_arms, 'baseline' \
+            if not parts else 'ours-{}'.format(conn_type))
     store_logs = "OPENAI_LOGDIR={} OPENAI_LOG_FORMAT=csv,stdout".format(logs) if log else "OPENAI_LOG_FORMAT=stdout"
 
     if env == 'Arm':
