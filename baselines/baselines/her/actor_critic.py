@@ -4,7 +4,7 @@ import numpy as np
 
 class ActorCritic:
     @store_args
-    def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers,
+    def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers, env=None,
                  **kwargs):
         """The actor-critic network and related training code.
 
@@ -25,8 +25,10 @@ class ActorCritic:
         self.g_tf = inputs_tf['g']
         self.u_tf = inputs_tf['u']
 
+        self.env = env.unwrapped
+
         # Prepare inputs for actor and critic.
-        o = self.o_stats.normalize(self.o_tf)
+        o = self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx]
         g = self.g_stats.normalize(self.g_tf)
         input_pi = tf.concat(axis=1, values=[o, g])  # for actor
 
@@ -59,7 +61,7 @@ def solve_quadratic(H, l, o, g, u, n, x):
 class ActorCriticParts:
     @store_args
     def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers,
-                 n_arms, learn_kin=False, conn_type='sums', **kwargs):
+                 n_arms, learn_kin=False, conn_type='sums', env=None, **kwargs):
         """The actor-critic network and related training code.
 
         Args:
@@ -75,18 +77,31 @@ class ActorCriticParts:
             hidden (int): number of hidden units that should be used in hidden layers
             layers (int): number of hidden layers
         """
+        # Access to the environment type (
+        self.env = env.unwrapped
+        
         # N-Arms
         self.n_arms = n_arms
         
         self.o_tf = inputs_tf['o']
         self.g_tf = inputs_tf['g']
         self.u_tf = inputs_tf['u']
-        
-        o = self.o_stats.normalize(self.o_tf)
-        g = self.g_stats.normalize(self.g_tf)
+
+        # Raw observations
+        #o_raw = self.o_tf[...,:self.env.o_ndx]
+        # Joint poses
+        joint_poses = self.o_tf[...,self.env.o_ndx:]
+        joint_poses = narm_reshape(joint_poses, n_arms)
+
+        # Normalization
+        o = self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx]
+        if 'area' not in conn_type:
+            g = self.g_stats.normalize(self.g_tf)
+        else:
+            g = self.g_tf
 
         # Expose for debugging
-        self.o_normalized  = o
+        self.o_normalized = o
         self.g_normalized = g
 
         # Reshape inputs for the number of arms
@@ -101,7 +116,13 @@ class ActorCriticParts:
         for i in range(n_arms):
             o_i = o[:, i]
             u_i = u[:, i]
-            g_i = g
+            
+            if 'area' not in conn_type:
+                g_i = g
+            elif conn_type == 'area':
+                g_i = g - joint_poses[:, i]
+            elif conn_type == 'area_norm':
+                g_i = self.g_stats.normalize(g - joint_poses[:, i])
             
             input_pis_i = tf.concat(axis=1, values=[o_i, g_i])
             
@@ -125,7 +146,7 @@ class ActorCriticParts:
 
         with tf.variable_scope('Q'):
             # for policy training
-            if conn_type == 'sums':
+            if conn_type in ['sums', 'area', 'area_norm', 'random']:
                 self.Q_pi_tf = sum(Q_pi_tfs)
                 self.Q_tf    = sum(Q_tfs)
             

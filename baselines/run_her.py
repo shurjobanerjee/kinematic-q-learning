@@ -13,7 +13,13 @@ def main(num_timesteps=5000, play=False, log=True, parts=False, n_arms=2, env='2
     if env == 'Arm':
         command = "{} python -m baselines.run --alg=her --env=FetchReachAct-v1 --num_timesteps={} {}".format(store_logs, num_timesteps, play)
     else:
-        command = "{} python -m baselines.run --alg=her --env=Arm-v0 --num_timesteps={} --n_arms {} --parts {} --conn_type {} relative_goals {} {}".format(store_logs, num_timesteps, n_arms, parts, conn_type, relative_goals, play)
+        
+        if kwargs:
+            kwargs_args = ' '.join(['--{} {}'.format(k,f) for k, f in kwargs.items()])
+        else:
+            kwargs_args = ''
+
+        command = "{} python -m baselines.run --alg=her --env=Arm-v0 --num_timesteps={} --n_arms {} --parts {} --conn_type {} relative_goals {} {} {}".format(store_logs, num_timesteps, n_arms, parts, conn_type, relative_goals, kwargs_args, play)
         print(command)
     
     subprocess.call(command, shell=True)

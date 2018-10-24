@@ -19,7 +19,7 @@ DEFAULT_PARAMS = {
     'max_u': 1.,  # max absolute value of actions on different coordinates
     # ddpg
     'layers': 3,  # number of layers in the critic/actor networks
-    'hidden': 256,  # number of neurons in each hidden layers
+    'hidden': 16,  # number of neurons in each hidden layers
     'network_class': 'baselines.her.actor_critic:ActorCritic',
     'Q_lr': 0.001,  # critic learning rate
     'pi_lr': 0.001,  # actor learning rate
@@ -178,10 +178,12 @@ def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True, **
                         'demo_batch_size': params['demo_batch_size'],
                         'prm_loss_weight': params['prm_loss_weight'],
                         'aux_loss_weight': params['aux_loss_weight'],
+                        'env': env # Pass environment for model to query env params
                         })
     ddpg_params['info'] = {
         'env_name': params['env_name'],
     }
+
     # Pass extra arguments to mode
     ddpg_params.update(kwargs)
     policy = DDPG(reuse=reuse, **ddpg_params, use_mpi=use_mpi)

@@ -35,13 +35,15 @@ class ArmEnv(gym.GoalEnv):
                  n_arms=2, 
                  visible=True,
                  achievable=True,
-                 wrapper_kwargs={}, 
+                 wrapper_kwargs={},
+                 conn_type=None,
                  **kwargs):
 
         self.n_arms = n_arms
         self.arm_info = np.zeros((n_arms, 4))
         self.desired_info = self.arm_info.copy() if achievable==True else None
         self.achievable = achievable
+        self.conn_type = conn_type
 
         self.arm_i = self.arml / n_arms
         self.arm_info[:, 0] = self.arm_i
@@ -55,6 +57,9 @@ class ArmEnv(gym.GoalEnv):
 
         self.visible = visible
 
+        # Separate observations based on indices
+        self.o_ndx, self.j_dim = self.preprocess_observation_ndxs()
+
         # Required for Goal-Env
         self.action_space = spaces.Box(-1., 1., shape=(n_arms,), dtype='float32')
         obs = self._get_obs()
@@ -63,6 +68,21 @@ class ArmEnv(gym.GoalEnv):
             achieved_goal=box(obs['achieved_goal']),
             observation=box(obs['observation']),
         ))
+
+        # Observation indices required by model
+
+
+    def get_shaped_observations(self):
+        """Couples together observations"""
+        # Actual observation
+        angles = self.arm_info[:,1].copy()
+        # Additional information
+        joint_poses = self.arm_info[:, 2:4]
+        return angles, joint_poses
+
+    def preprocess_observation_ndxs(self):
+        obs, jp = self.get_shaped_observations()
+        return np.prod(obs.shape), jp.shape[1]
 
 
     def seed(self, seed=None):
@@ -160,8 +180,14 @@ class ArmEnv(gym.GoalEnv):
 
     def _get_obs(self):
         # Observations
-        observation = self.arm_info[:,1].copy()
+        observation = self.get_shaped_observations()
+        observation = np.concatenate([o.flatten() for o in observation], 0)
+
         # Global coordinates
+        if self.conn_type == 'random':
+            self.random_kinematics()
+
+        
         achieved_goal = self.arm_info[-1][2:4].copy()
         desired_goal  = self.point_info.copy()
         
