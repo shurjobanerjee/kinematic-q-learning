@@ -107,8 +107,8 @@ class DDPG(object):
         # Configure the replay buffer.
         buffer_shapes = {key: (self.T-1 if key != 'o' else self.T, *input_shapes[key])
                          for key, val in input_shapes.items()}
-        buffer_shapes['g'] = (buffer_shapes['g'][0], self.dimg)
-        buffer_shapes['ag'] = (self.T, self.dimg)
+        buffer_shapes['g'] = tuple([buffer_shapes['g'][0]] + list(self.dimg))
+        buffer_shapes['ag'] = tuple([self.T] +  list(self.dimg))
 
         buffer_size = (self.buffer_size // self.rollout_batch_size) * self.rollout_batch_size
         self.buffer = ReplayBuffer(buffer_shapes, buffer_size, self.T, self.sample_transitions)
@@ -145,9 +145,9 @@ class DDPG(object):
             vals += [policy.Q_pi_tf]
         # feed
         feed = {
-            policy.o_tf: o.reshape(-1, self.dimo),
-            policy.g_tf: g.reshape(-1, self.dimg),
-            policy.u_tf: np.zeros((o.size // self.dimo, self.dimu), dtype=np.float32)
+            policy.o_tf: o, #o.reshape(-1, self.dimo),
+            policy.g_tf: g, #g.reshape(-1, self.dimg),
+            policy.u_tf: np.zeros((o.size[0] // self.dimo[0], self.dimu), dtype=np.float32)
         }
 
         ret = self.sess.run(vals, feed_dict=feed)

@@ -5,7 +5,7 @@ import numpy as np
 from params import Params
 
 def linearize(x):
-    return tf.reshape(x, [-1, np.prod(x.get_shape().as_list()[1:]])
+    return tf.reshape(x, [-1, np.prod(x.get_shape().as_list()[1:])])
 
 class ActorCritic:
     @store_args
@@ -26,11 +26,10 @@ class ActorCritic:
             hidden (int): number of hidden units that should be used in hidden layers
             layers (int): number of hidden layers
         """
-        self.o_tf = inputs_tf['o']
-        self.g_tf = inputs_tf['g']
-        self.u_tf = inputs_tf['u']
+        self.o_tf = linearize(inputs_tf['o'])
+        self.g_tf = linearize(inputs_tf['g'])
+        self.u_tf = linearize(inputs_tf['u'])
         
-        import pdb; pdb.set_trace()
         # Prepare inputs for actor and critic.
         o = self.o_stats.normalize(self.o_tf)
         g = self.g_stats.normalize(self.g_tf)
@@ -39,7 +38,7 @@ class ActorCritic:
         # Networks.
         with tf.variable_scope('pi'):
             self.pi_tf = self.max_u * tf.tanh(nn(
-                input_pi, [self.hidden] * self.layers + [self.dimu]))
+                input_pi, [self.hidden] * self.layers + [self.dimu[0]]))
         with tf.variable_scope('Q'):
             # for policy training
             input_Q = tf.concat(axis=1, values=[o, g, self.pi_tf / self.max_u])
