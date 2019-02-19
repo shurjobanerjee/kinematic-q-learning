@@ -47,7 +47,6 @@ class RolloutWorker:
         self.initial_o = self.obs_dict['observation']
         self.initial_ag = self.obs_dict['achieved_goal']
         self.g = self.obs_dict['desired_goal']
-        self.initial_e = self.obs_dict['end_eff']
 
     def generate_rollouts(self):
         """Performs `rollout_batch_size` rollouts in parallel for time horizon `T` with the current
@@ -56,21 +55,19 @@ class RolloutWorker:
         self.reset_all_rollouts()
 
         # compute observations
-        o  = np.empty((self.rollout_batch_size, self.dims['o']), np.float32)  # observations
+        o = np.empty((self.rollout_batch_size, self.dims['o']), np.float32)  # observations
         ag = np.empty((self.rollout_batch_size, self.dims['g']), np.float32)  # achieved goals
-        e  = np.empty((self.rollout_batch_size, self.dims['e']), np.float32)  # end effectors
-        o[:]  = self.initial_o
+        o[:] = self.initial_o
         ag[:] = self.initial_ag
-        e[:]  = self.initial_e 
 
         # generate episodes
-        obs, achieved_goals, acts, goals, successes, end_effs = [], [], [], [], [], []
+        obs, achieved_goals, acts, goals, successes = [], [], [], [], []
         dones = []
         info_values = [np.empty((self.T - 1, self.rollout_batch_size, self.dims['info_' + key]), np.float32) for key in self.info_keys]
         Qs = []
         for t in range(self.T):
             policy_output = self.policy.get_actions(
-                o, ag, self.g, e,
+                o, ag, self.g,
                 compute_Q=self.compute_Q,
                 noise_eps=self.noise_eps if not self.exploit else 0.,
                 random_eps=self.random_eps if not self.exploit else 0.,
@@ -86,16 +83,13 @@ class RolloutWorker:
                 # The non-batched case should still have a reasonable shape.
                 u = u.reshape(1, -1)
 
-            o_new  = np.empty((self.rollout_batch_size, self.dims['o']))
+            o_new = np.empty((self.rollout_batch_size, self.dims['o']))
             ag_new = np.empty((self.rollout_batch_size, self.dims['g']))
-            e_new  =  np.empty((self.rollout_batch_size, self.dims['e']))
-
             success = np.zeros(self.rollout_batch_size)
             # compute new states and observations
             obs_dict_new, _, done, info = self.venv.step(u)
             o_new = obs_dict_new['observation']
             ag_new = obs_dict_new['achieved_goal']
-            e_new = obs_dict_new['end_eff']
             success = np.array([i.get('is_success', 0.0) for i in info])
 
             if any(done):
@@ -119,20 +113,15 @@ class RolloutWorker:
             successes.append(success.copy())
             acts.append(u.copy())
             goals.append(self.g.copy())
-            end_effs.append(e.copy())
             o[...] = o_new
             ag[...] = ag_new
-            e[...] = e_new
-
         obs.append(o.copy())
         achieved_goals.append(ag.copy())
-        end_effs.append(e.copy())
 
         episode = dict(o=obs,
                        u=acts,
                        g=goals,
-                       ag=achieved_goals,
-                       e=end_effs)
+                       ag=achieved_goals)
         for key, value in zip(self.info_keys, info_values):
             episode['info_{}'.format(key)] = value
 

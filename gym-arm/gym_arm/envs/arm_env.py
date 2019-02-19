@@ -1,13 +1,6 @@
 """
 Environment for Robot Arm.
-You can customize this script in a way you want.
-
-View more on [莫烦Python] : https://morvanzhou.github.io/tutorials/
-
-
-Requirement:
-pyglet >= 1.2.4
-numpy >= 1.12.1
+Adapted from: https://morvanzhou.github.io/tutorials/
 """
 import numpy as np
 import pyglet
@@ -16,6 +9,7 @@ from gym import error, spaces
 from gym.utils import seeding
 
 from params import Params
+
 #pyglet.clock.set_fps_limit(10000)
 pyglet.clock.set_fps_limit(15)
 
@@ -26,7 +20,6 @@ def box(obs):
 
 def goal_distance(goal_a, goal_b):
     assert goal_a.shape == goal_b.shape
-
     return np.linalg.norm(goal_a - goal_b, axis=-1)
 
 class ArmEnv(gym.GoalEnv):
@@ -43,8 +36,7 @@ class ArmEnv(gym.GoalEnv):
     grab_counter = 0
 
     def __init__(self, mode='hard', reward_type='sparse', distance_threshold=50, n_arms=3, visible=True,  wrapper_kwargs={}, **kwargs):
-        # node1 (l, d_rad, x, y),
-        # node2 (l, d_rad, x, y)
+        
         self.mode = mode
         n_arms = Params.n_arms #FIXME
         self.n_arms = n_arms
@@ -66,11 +58,10 @@ class ArmEnv(gym.GoalEnv):
             desired_goal=box(obs['desired_goal']),
             achieved_goal=box(obs['achieved_goal']),
             observation=box(obs['observation']),
-            end_eff=box(obs['end_eff'])
         ))
 
     def random_point(self):
-        r = np.random.random() * self.arml #self.arm_info[:, 0].sum()
+        r = self.arml#np.random.random() * self.arml #self.arm_info[:, 0].sum()
         t = np.random.random() * 2*np.pi
         p = np.asarray([r*np.cos(t), r*np.sin(t)]) + self.center_coord
         return p
@@ -172,9 +163,9 @@ class ArmEnv(gym.GoalEnv):
         obs['observation'] = observation.copy().reshape(-1)
 
         # Attach center coordinate
-        end_effs = np.concatenate([np.reshape(self.center_coord, (1,-1)), 
-                                   self.arm_info[:, 2:4]], 0)
-        obs['end_eff'] = end_effs.copy().reshape(-1)
+        #end_effs = np.concatenate([np.reshape(self.center_coord, (1,-1)), 
+        #                           self.arm_info[:, 2:4]], 0)
+        #obs['end_eff'] = end_effs.copy().reshape(-1)
 
         #if self.relative:
         #    for g in ['achieved_goal', 'desired_goal']:

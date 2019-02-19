@@ -42,9 +42,8 @@ class FetchEnv(robot_env.RobotEnv):
         self.target_range = target_range
         self.distance_threshold = distance_threshold
         self.reward_type = reward_type
-
         super(FetchEnv, self).__init__(
-            model_path=model_path, n_substeps=n_substeps, n_actions=4,
+            model_path=model_path, n_substeps=n_substeps, n_actions=n_actions,
             initial_qpos=initial_qpos)
 
     # GoalEnv methods

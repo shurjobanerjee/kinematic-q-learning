@@ -4,7 +4,7 @@ import subprocess
 
 class Params:
     parts = False
-    n_arms = 3
+    n_arms = 2
     etype = '2d' #'Arm' 
 
 @keyword2cmdline.command
