@@ -30,16 +30,9 @@ def goal_distance_2d(goal_a, goal_b):
 class ArmEnv(gym.GoalEnv):
     action_bound = [-1, 1]
     action_dim = 2
-    state_dim = 7
     dt = 1 # refresh rate
-    arml  = 300
+    arml  = 1
     viewer = None
-    viewer_sol = None
-    viewer_xy = (600, 600)
-    get_point = False
-    mouse_in = np.array([False])
-    point_l = 15
-    grab_counter = 0
 
     def __init__(self, 
                  reward_type='sparse', 
@@ -54,8 +47,6 @@ class ArmEnv(gym.GoalEnv):
         self.arm_i = self.arml // n_arms
         self.arm_info[:, 0] = self.arm_i
         self.relative = Params.parts #FIXME
-        
-        self.center_coord = np.array(self.viewer_xy)/2
         
         # Reset whhen initializing
         self.point_info = np.zeros(2)
@@ -113,10 +104,11 @@ class ArmEnv(gym.GoalEnv):
         return obs, reward, done, info
     
     def random_point(self):
+        """Random point selection on unit disk."""
         r = np.random.random() 
         t = np.random.random() * 2*np.pi 
         sr = np.sqrt(r) # Unbiased disk point sampling
-        p = np.asarray([sr*self.arml*np.cos(t), sr*self.arml*np.sin(t)]) + self.center_coord
+        p = np.asarray([sr*self.arml*np.cos(t), sr*self.arml*np.sin(t)]) 
         return p
 
     def random_kinematics(self):
@@ -125,8 +117,8 @@ class ArmEnv(gym.GoalEnv):
         self.forward_kinematics()
     
     def forward_kinematics(self):
-        center_coord = self.center_coord
         armrad = 0
+        center_coord = 0
         for i in range(self.n_arms):
             armrad +=  self.arm_info[i, 1]
             armdx_dy = np.array([self.arm_info[i, 0] * np.cos(armrad),
@@ -143,7 +135,10 @@ class ArmEnv(gym.GoalEnv):
 
     def render(self, mode='human'):
         if self.viewer is None:
-            self.viewer = Viewer(*self.viewer_xy, self.arm_info, self.point_info, self.point_l, self.mouse_in, self.n_arms, self.visible)
+            self.viewer = Viewer(self.arm_info, 
+                                 self.point_info, 
+                                 self.n_arms, 
+                                 self.visible)
 
         self.viewer.set_info(self.last_info)
         self.viewer.render()
@@ -151,8 +146,8 @@ class ArmEnv(gym.GoalEnv):
         if mode == 'rgb_array':
             return self.viewer.rgb_array()
 
-    def sample_action(self):
-        return np.random.uniform(*self.action_bound, size=self.action_dim)
+    #def sample_action(self):
+    #    return np.random.uniform(*self.action_bound, size=self.action_dim)
 
     def set_fps(self, fps=30):
         pyglet.clock.set_fps_limit(fps)
@@ -179,16 +174,17 @@ class Viewer(pyglet.window.Window):
     }
     fps_display = pyglet.clock.ClockDisplay()
     bar_thc = 5
+    point_l = 15
+    viewer_xy = (600, 600)
 
-    def __init__(self, width, height, arm_info, point_info, point_l, mouse_in, n_arms, visible):
+    def __init__(self, arm_info, point_info, n_arms, visible):
+        width, height = self.viewer_xy
         super(Viewer, self).__init__(width, height, resizable=False, caption='Arm', vsync=False, visible=visible)  # vsync=False to not use the monitor FPS
         self.set_location(x=80, y=10)
         pyglet.gl.glClearColor(*self.color['background'])
 
         self.arm_info = arm_info
         self.point_info = point_info
-        self.mouse_in = mouse_in
-        self.point_l = point_l
 
         self.n_arms = n_arms
 
@@ -249,9 +245,9 @@ class Viewer(pyglet.window.Window):
 
         # Local to global angles
         global_angles = np.cumsum(self.arm_info[:, 1])
-
+        
         for i in range(self.n_arms):
-            arm_coord[i] = (*center_coord, *(self.arm_info[i, 2:4]))
+            arm_coord[i] = (*center_coord, *(300*self.arm_info[i, 2:4]))
             arm_thick_rad[i] = np.pi / 2 - global_angles[i]
         
             x01 = arm_coord[i][0] - np.cos(arm_thick_rad[i]) * self.bar_thc
@@ -270,7 +266,7 @@ class Viewer(pyglet.window.Window):
 
             self.arm[i].vertices = arm_box[i]
 
-            center_coord = self.arm_info[i, 2:4]
+            center_coord = self.arm_info[i, 2:4] * 300
 
         #Draw info
         self.label = pyglet.text.Label("{:2f}".format(self.info['is_success']),
@@ -280,31 +276,4 @@ class Viewer(pyglet.window.Window):
                                   anchor_x='center', anchor_y='center',
                                   color=(0, 0, 0, 255))
 
-
-    #def on_key_press(self, symbol, modifiers):
-    #    if symbol == pyglet.window.key.UP:
-    #        self.arm_info[0, 1] += .1
-    #        print(self.arm_info[:, 2:4] - self.point_info)
-    #    elif symbol == pyglet.window.key.DOWN:
-    #        self.arm_info[0, 1] -= .1
-    #        print(self.arm_info[:, 2:4] - self.point_info)
-    #    elif symbol == pyglet.window.key.LEFT:
-    #        self.arm_info[1, 1] += .1
-    #        print(self.arm_info[:, 2:4] - self.point_info)
-    #    elif symbol == pyglet.window.key.RIGHT:
-    #        self.arm_info[1, 1] -= .1
-    #        print(self.arm_info[:, 2:4] - self.point_info)
-    #    elif symbol == pyglet.window.key.Q:
-    #        pyglet.clock.set_fps_limit(1000)
-    #    elif symbol == pyglet.window.key.A:
-    #        pyglet.clock.set_fps_limit(30)
-
-    #def on_mouse_motion(self, x, y, dx, dy):
-    #    self.point_info[:] = [x, y]
-
-    #def on_mouse_enter(self, x, y):
-    #    self.mouse_in[0] = True
-
-    #def on_mouse_leave(self, x, y):
-    #    self.mouse_in[0] = False
 
