@@ -63,8 +63,8 @@ def train(args, extra_args):
     learn = get_learn_function(args.alg)
     alg_kwargs = get_learn_function_defaults(args.alg, env_type)
     alg_kwargs.update(extra_args)
-
-    env = build_env(args)
+    
+    env = build_env(args, **extra_args)
     if args.save_video_interval != 0:
         env = VecVideoRecorder(env, osp.join(logger.Logger.CURRENT.dir, "videos"), record_video_trigger=lambda x: x % args.save_video_interval == 0, video_length=args.save_video_length)
 
@@ -86,7 +86,7 @@ def train(args, extra_args):
     return model, env
 
 
-def build_env(args):
+def build_env(args, **kwargs):
     ncpu = multiprocessing.cpu_count()
     if sys.platform == 'darwin': ncpu //= 2
     nenv = args.num_env or ncpu
@@ -113,7 +113,7 @@ def build_env(args):
        get_session(config=config)
 
        flatten_dict_observations = alg not in {'her'}
-       env = make_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale, flatten_dict_observations=flatten_dict_observations)
+       env = make_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale, flatten_dict_observations=flatten_dict_observations, **kwargs)
 
        if env_type == 'mujoco':
            env = VecNormalize(env)
@@ -215,7 +215,7 @@ def main(args):
 
     if args.play:
         logger.log("Running trained model")
-        env = build_env(args)
+        env = build_env(args, **extra_args)
         obs = env.reset()
 
         state = model.initial_state if hasattr(model, 'initial_state') else None

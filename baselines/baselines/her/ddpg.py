@@ -62,6 +62,7 @@ class DDPG(object):
             prm_loss_weight: Weight corresponding to the primary loss
             aux_loss_weight: Weight corresponding to the auxilliary loss also called the cloning loss
         """
+
         if self.clip_return is None:
             self.clip_return = np.inf
 
@@ -92,7 +93,7 @@ class DDPG(object):
                 tf.placeholder(tf.float32, shape=shape) for shape in self.stage_shapes.values()]
             self.stage_op = self.staging_tf.put(self.buffer_ph_tf)
 
-            self._create_network(reuse=reuse)
+            self._create_network(reuse=reuse, **kwargs)
 
         # Configure the replay buffer.
         buffer_shapes = {key: (self.T-1 if key != 'o' else self.T, *input_shapes[key])
@@ -312,7 +313,7 @@ class DDPG(object):
         res = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=self.scope + '/' + scope)
         return res
 
-    def _create_network(self, reuse=False):
+    def _create_network(self, reuse=False, **kwargs):
         logger.info("Creating a DDPG agent with action space %d x %s..." % (self.dimu, self.max_u))
         self.sess = tf_util.get_session()
 

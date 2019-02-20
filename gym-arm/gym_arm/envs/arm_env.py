@@ -15,9 +15,6 @@ import gym
 from gym import error, spaces
 from gym.utils import seeding
 
-#FIXME
-from params import Params
-
 pyglet.clock.set_fps_limit(15)
 
 def box(obs):
@@ -28,16 +25,14 @@ def goal_distance_2d(goal_a, goal_b):
     return np.linalg.norm(goal_a - goal_b, axis=-1)
 
 class ArmEnv(gym.GoalEnv):
-    action_bound = [-1, 1]
-    action_dim = 2
     dt = 1 # refresh rate
-    arml  = 1
+    arml  = 1 # Unit disk
     viewer = None
 
     def __init__(self, 
                  reward_type='sparse', 
                  distance_threshold=0.15, 
-                 n_arms=Params.n_arms, 
+                 n_arms=2, 
                  visible=True,
                  achievable=True,
                  wrapper_kwargs={}, 

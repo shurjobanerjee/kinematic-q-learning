@@ -10,7 +10,7 @@ class DummyVecEnv(VecEnv):
     Useful when debugging and when num_env == 1 (in the latter case,
     avoids communication overhead)
     """
-    def __init__(self, env_fns):
+    def __init__(self, env_fns, **kwargs):
         """
         Arguments:
 

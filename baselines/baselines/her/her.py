@@ -116,9 +116,9 @@ def learn(*, network, env, total_timesteps,
     params.update(**override_params)  # makes it possible to override any parameter
     with open(os.path.join(logger.get_dir(), 'params.json'), 'w') as f:
          json.dump(params, f)
-    params = config.prepare_params(params)
+    params = config.prepare_params(params, **kwargs)
     params['rollout_batch_size'] = env.num_envs
-
+    
     if demo_file is not None:
         params['bc_loss'] = 1
     params.update(kwargs)
@@ -138,7 +138,7 @@ def learn(*, network, env, total_timesteps,
         logger.warn()
 
     dims = config.configure_dims(params)
-    policy = config.configure_ddpg(dims=dims, params=params, clip_return=clip_return)
+    policy = config.configure_ddpg(dims=dims, params=params, clip_return=clip_return, **kwargs)
     if load_path is not None:
         tf_util.load_variables(load_path)
 
