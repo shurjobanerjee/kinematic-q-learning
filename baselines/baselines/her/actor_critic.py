@@ -58,7 +58,7 @@ def solve_quadratic(H, l, o, g, u, n, x):
 class ActorCriticParts:
     @store_args
     def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers,
-                 n_arms, learn_kin=False, **kwargs):
+                 n_arms, learn_kin=False, conn_type='sum', **kwargs):
         """The actor-critic network and related training code.
 
         Args:
@@ -121,13 +121,19 @@ class ActorCriticParts:
         with tf.variable_scope('pi'):
             self.pi_tf = tf.concat(axis=1, values=pi_tfs)
         
+
         with tf.variable_scope('Q'):
             # for policy training
-            #self.Q_pi_tf = sum(Q_pi_tfs)
-            #self.Q_tf    = sum(Q_tfs)
-
-            Q1 = tf.concat(axis=1, values=Q_pi_tfs)
-            self.Q_pi_tf = nn(Q1, [hidden] * self.layers + [1], reuse=tf.AUTO_REUSE)
+            if conn_type == 'sum':
+                self.Q_pi_tf = sum(Q_pi_tfs)
+                self.Q_tf    = sum(Q_tfs)
             
-            Q2 = tf.concat(axis=1, values=Q_tfs)
-            self.Q_tf   = nn(Q2, [hidden] * self.layers + [1], reuse=tf.AUTO_REUSE)
+            elif conn_type == 'fc':
+                Q1 = tf.concat(axis=1, values=Q_pi_tfs)
+                self.Q_pi_tf = nn(Q1, [hidden] * self.layers + [1], reuse=tf.AUTO_REUSE)
+                Q2 = tf.concat(axis=1, values=Q_tfs)
+                self.Q_tf   = nn(Q2, [hidden] * self.layers + [1], reuse=tf.AUTO_REUSE)
+
+            elif conn_type=='layered':
+                pass
+
