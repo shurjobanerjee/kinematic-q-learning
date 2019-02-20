@@ -36,17 +36,20 @@ class ArmEnv(gym.GoalEnv):
 
     def __init__(self, 
                  reward_type='sparse', 
-                 distance_threshold=50, 
+                 distance_threshold=0.15, 
                  n_arms=Params.n_arms, 
-                 visible=True,  
+                 visible=True,
+                 achievable=True,
                  wrapper_kwargs={}, 
                  **kwargs):
 
         self.n_arms = n_arms
         self.arm_info = np.zeros((n_arms, 4))
-        self.arm_i = self.arml // n_arms
+        self.desired_info = self.arm_info.copy() if achievable==True else None
+        self.achievable = achievable
+
+        self.arm_i = self.arml / n_arms
         self.arm_info[:, 0] = self.arm_i
-        self.relative = Params.parts #FIXME
         
         # Reset whhen initializing
         self.point_info = np.zeros(2)
@@ -105,10 +108,16 @@ class ArmEnv(gym.GoalEnv):
     
     def random_point(self):
         """Random point selection on unit disk."""
-        r = np.random.random() 
-        t = np.random.random() * 2*np.pi 
-        sr = np.sqrt(r) # Unbiased disk point sampling
-        p = np.asarray([sr*self.arml*np.cos(t), sr*self.arml*np.sin(t)]) 
+        if not self.achievable:
+            r = np.random.random() 
+            t = np.random.random() * 2*np.pi 
+            sr = np.sqrt(r) # Unbiased disk point sampling
+            p = np.asarray([sr*self.arml*np.cos(t), sr*self.arml*np.sin(t)]) 
+        else:
+            self.random_kinematics()
+            self.desired_info = self.arm_info.copy()
+            p = self.desired_info[-1, 2:4]
+
         return p
 
     def random_kinematics(self):
@@ -138,9 +147,10 @@ class ArmEnv(gym.GoalEnv):
             self.viewer = Viewer(self.arm_info, 
                                  self.point_info, 
                                  self.n_arms, 
-                                 self.visible)
+                                 self.visible,
+                                 self.desired_info)
 
-        self.viewer.set_info(self.last_info)
+        self.viewer.set_vals(self.arm_info, self.desired_info, self.last_info)
         self.viewer.render()
         
         if mode == 'rgb_array':
@@ -153,7 +163,6 @@ class ArmEnv(gym.GoalEnv):
         pyglet.clock.set_fps_limit(fps)
 
     def _get_obs(self):
-        
         # Observations
         observation = self.arm_info[:,1].copy()
         # Global coordinates
@@ -174,46 +183,59 @@ class Viewer(pyglet.window.Window):
     }
     fps_display = pyglet.clock.ClockDisplay()
     bar_thc = 5
-    point_l = 15
+    point_l = 15/300.
     viewer_xy = (600, 600)
 
-    def __init__(self, arm_info, point_info, n_arms, visible):
+    def __init__(self, arm_info, point_info, n_arms, visible, desired_info):
         width, height = self.viewer_xy
-        super(Viewer, self).__init__(width, height, resizable=False, caption='Arm', vsync=False, visible=visible)  # vsync=False to not use the monitor FPS
+        super(Viewer, self).__init__(width, 
+                                     height, 
+                                     resizable=False, 
+                                     caption='Arm', 
+                                     vsync=False, 
+                                     visible=visible)  # vsync=False to not use the monitor FPS
         self.set_location(x=80, y=10)
         pyglet.gl.glClearColor(*self.color['background'])
 
         self.arm_info = arm_info
+        self.desired_info = desired_info
         self.point_info = point_info
 
         self.n_arms = n_arms
-
-        self.center_coord = np.array((min(width, height)/2, ) * 2)
+        
+        self.scale_fac = min(width, height)//2
+        self.center_coord = np.array((self.scale_fac, self.scale_fac))
         self.batch = pyglet.graphics.Batch()
         
-        point_box = [0]*8
-        arm_box = [None]*self.n_arms
-        for i in range(n_arms):
-            arm_box[i] = [0]*8
-
+        # Colors
         c1, c2, c3 = (249, 0, 255)*4, (86, 109, 249)*4, (249, 39, 65)*4
         
-        self.point = self.batch.add(4, pyglet.gl.GL_QUADS, None, ('v2f', point_box), ('c3B', c2))
+        # Objects
+        point_box = [0]*8
+        self.point = self.batch_add(point_box, c2)
+        arm_box = [[0]*8 for i in range(self.n_arms)]
+        self.arm = [self.batch_add(arm_box[i], c1) for i in range(self.n_arms)]
         
-        self.arm = [None]*self.n_arms
-        for i in range(n_arms):
-            self.arm[i] = self.batch.add(4, pyglet.gl.GL_QUADS, None, ('v2f', arm_box[i]), ('c3B', c1))
+        if self.desired_info is not None:
+            arm_box_des = [[0]*8 for i in range(self.n_arms)]
+            self.arm_des = [self.batch_add(arm_box_des[i], c3) for i in range(self.n_arms)]
+
         self.info = None
 
-    def set_info(self, info):
-        self.info = info
+    def batch_add(self, v2f, c3b):
+        return self.batch.add(4, pyglet.gl.GL_QUADS, None, ('v2f', v2f), ('c3B', c3b))
+
+    def set_vals(self, arm_info, desired_info, info):
+        self.arm_info = arm_info.copy()
+        self.desired_info = desired_info if desired_info is None else desired_info.copy()
+        self.info = info.copy()
 
     def set_arm_info(self, arm_info):
         self.arm_info = arm_info
 
     def render(self):
         pyglet.clock.tick()
-        self._update_arm()
+        self._update_sim()
         self.switch_to()
         self.dispatch_events()
         self.dispatch_event('on_draw')
@@ -228,47 +250,55 @@ class Viewer(pyglet.window.Window):
     def rgb_array(self):
         return pyglet.image.get_buffer_manager().get_color_buffer()
 
-    def _update_arm(self):
+    def scale(self, pts):
+        return pts * self.scale_fac + self.scale_fac
+
+    def _update_sim(self):
+        self._make_goal(self.point_info, self.point_l)
+        if self.desired_info is not None:
+            self._update_arm(self.desired_info, self.arm_des)
+        self._update_arm(self.arm_info, self.arm)
+
+
+    def _make_goal(self, point_info, point_l):
         # Draw goal
-        point_l = self.point_l
-        point_box = (self.point_info[0] - point_l, self.point_info[1] - point_l,
-                     self.point_info[0] + point_l, self.point_info[1] - point_l,
-                     self.point_info[0] + point_l, self.point_info[1] + point_l,
-                     self.point_info[0] - point_l, self.point_info[1] + point_l)
-        self.point.vertices = point_box
-        
-        # Draw arm boxes
-        arm_coord = [None]*self.n_arms
-        arm_box   = [None]*self.n_arms
-        arm_thick_rad = [None]*self.n_arms
-        center_coord = self.center_coord
+        point_box = np.asarray([
+                     point_info[0] - point_l, point_info[1] - point_l,
+                     point_info[0] + point_l, point_info[1] - point_l,
+                     point_info[0] + point_l, point_info[1] + point_l,
+                     point_info[0] - point_l, point_info[1] + point_l])
+        self.point.vertices = self.scale(point_box)
 
+    def _update_arm(self, arm_info, arm):
         # Local to global angles
-        global_angles = np.cumsum(self.arm_info[:, 1])
-        
+        global_angles = np.cumsum(arm_info[:, 1])
+        arm_info[:,2:4] = self.scale(arm_info[:,2:4])
+
+        # Draw arm boxes
+        center_coord = self.center_coord
         for i in range(self.n_arms):
-            arm_coord[i] = (*center_coord, *(300*self.arm_info[i, 2:4]))
-            arm_thick_rad[i] = np.pi / 2 - global_angles[i]
+            arm_coord = (*(center_coord), *(arm_info[i, 2:4]))
+            arm_thick_rad = np.pi / 2 - global_angles[i]
         
-            x01 = arm_coord[i][0] - np.cos(arm_thick_rad[i]) * self.bar_thc
-            y01 = arm_coord[i][1] + np.sin(arm_thick_rad[i]) * self.bar_thc
+            x01 = arm_coord[0] - np.cos(arm_thick_rad) * self.bar_thc
+            y01 = arm_coord[1] + np.sin(arm_thick_rad) * self.bar_thc
 
-            x02 = arm_coord[i][0] + np.cos(arm_thick_rad[i]) * self.bar_thc
-            y02 = arm_coord[i][1] - np.sin(arm_thick_rad[i]) * self.bar_thc
+            x02 = arm_coord[0] + np.cos(arm_thick_rad) * self.bar_thc
+            y02 = arm_coord[1] - np.sin(arm_thick_rad) * self.bar_thc
 
-            x11 = arm_coord[i][2] + np.cos(arm_thick_rad[i]) * self.bar_thc
-            y11 = arm_coord[i][3] - np.sin(arm_thick_rad[i]) * self.bar_thc
+            x11 = arm_coord[2] + np.cos(arm_thick_rad) * self.bar_thc
+            y11 = arm_coord[3] - np.sin(arm_thick_rad) * self.bar_thc
 
-            x12 = arm_coord[i][2] - np.cos(arm_thick_rad[i]) * self.bar_thc
-            y12 = arm_coord[i][3] + np.sin(arm_thick_rad[i]) * self.bar_thc
+            x12 = arm_coord[2] - np.cos(arm_thick_rad) * self.bar_thc
+            y12 = arm_coord[3] + np.sin(arm_thick_rad) * self.bar_thc
         
-            arm_box[i] = (x01, y01, x02, y02, x11, y11, x12, y12)
+            arm_box = (x01, y01, x02, y02, x11, y11, x12, y12)
 
-            self.arm[i].vertices = arm_box[i]
+            arm[i].vertices = arm_box
 
-            center_coord = self.arm_info[i, 2:4] * 300
+            center_coord = arm_info[i, 2:4] 
 
-        #Draw info
+        #Distance to goal
         self.label = pyglet.text.Label("{:2f}".format(self.info['is_success']),
                                   font_name='Times New Roman',
                                   font_size=36,
