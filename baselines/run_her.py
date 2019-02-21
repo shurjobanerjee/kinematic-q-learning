@@ -3,9 +3,9 @@ import keyword2cmdline
 import subprocess
 
 @keyword2cmdline.command
-def main(num_timesteps=5000, play=False, log=True, parts=False, n_arms=2, env='2d', conn_type='sum', relative_goals=False, **kwargs):
+def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='2d', conn_type='sum', relative_goals=False, **kwargs):
     play = "" if not play else "--play"
-    method = 'baseline' if not parts else 'ours-{}'.format(conn_type)
+    method = 'baseline' if parts is "None" else 'ours-{}-{}'.format(parts, conn_type)
     method = "{}-rel_goals-{}".format(method, relative_goals)
     logs = "logs/{}/{}/{}".format(env, n_arms, method)
     store_logs = "OPENAI_LOGDIR={} OPENAI_LOG_FORMAT=csv,stdout".format(logs) if log else "OPENAI_LOG_FORMAT=stdout"

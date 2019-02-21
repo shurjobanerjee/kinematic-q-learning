@@ -70,7 +70,7 @@ def cached_make_env(make_env, **kwargs):
     return CACHED_ENVS[make_env]
 
 
-def prepare_params(params, parts=False, **kwargs):
+def prepare_params(params, **kwargs):
     # DDPG params
     ddpg_params = dict()
     env_name = params['env_name']
@@ -116,7 +116,13 @@ def prepare_params(params, parts=False, **kwargs):
         del params[name]
     
     # HER by parts of Regular HER
-    ddpg_params['network_class'] = 'baselines.her.actor_critic:ActorCritic' if not parts else 'baselines.her.actor_critic:ActorCriticParts' 
+    parts = kwargs['parts']
+    if parts == 'None':
+        ddpg_params['network_class'] = 'baselines.her.actor_critic:ActorCritic' 
+    elif parts == 'sepq':
+        ddpg_params['network_class'] = 'baselines.her.actor_critic:ActorCriticParts' 
+    elif parts == 'area':
+        ddpg_params['network_class'] = 'baselines.her.actor_critic:ActorCriticArea' 
     params['ddpg_params'] = ddpg_params
     
     return params
@@ -190,11 +196,11 @@ def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True, **
     return policy
 
 
-def configure_dims(params):
-    env = cached_make_env(params['make_env'])
+def configure_dims(params, **kwargs):
+    env = cached_make_env(params['make_env'], **kwargs)
     env.reset()
     obs, _, _, info = env.step(env.action_space.sample())
-
+    
     dims = {
         'o': obs['observation'].shape[0],
         'u': env.action_space.shape[0],

@@ -37,6 +37,7 @@ class ArmEnv(gym.GoalEnv):
                  achievable=True,
                  wrapper_kwargs={},
                  conn_type=None,
+                 parts=None,
                  **kwargs):
 
         self.n_arms = n_arms
@@ -44,6 +45,7 @@ class ArmEnv(gym.GoalEnv):
         self.desired_info = self.arm_info.copy() if achievable==True else None
         self.achievable = achievable
         self.conn_type = conn_type
+        self.parts = parts
 
         self.arm_i = self.arml / n_arms
         self.arm_info[:, 0] = self.arm_i
@@ -111,8 +113,8 @@ class ArmEnv(gym.GoalEnv):
         done = False
 
         # Get achieved goal and desired goal in terms of global coordinates
-        achieved_goal = obs['achieved_goal'].copy()
-        desired_goal  = obs['desired_goal'].copy()
+        achieved_goal = obs['achieved_goal'][:2].copy()
+        desired_goal  = obs['desired_goal'][:2].copy()
 
         info = dict(is_success=self._is_success(achieved_goal, desired_goal))
         info = dict(is_success=goal_distance_2d(achieved_goal, desired_goal))
@@ -190,7 +192,13 @@ class ArmEnv(gym.GoalEnv):
         
         achieved_goal = self.arm_info[-1][2:4].copy()
         desired_goal  = self.point_info.copy()
-        
+
+        if self.parts == 'area':
+            achieved_goal = np.asarray([achieved_goal - self.arm_info[i][2:4] \
+                    for i in range(self.n_arms)]).flatten()
+            desired_goal  = np.asarray([desired_goal - self.arm_info[i][2:4] \
+                    for i in range(self.n_arms)]).flatten()
+
         return dict(
                 achieved_goal = achieved_goal,
                 desired_goal = desired_goal,

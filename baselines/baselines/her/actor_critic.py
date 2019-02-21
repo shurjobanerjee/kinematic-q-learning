@@ -178,6 +178,98 @@ class ActorCriticParts:
 
         total_params()
 
+class ActorCriticArea:
+    @store_args
+    def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers,
+                 n_arms, learn_kin=False, conn_type='sums', env=None, **kwargs):
+        """The actor-critic network and related training code.
+
+        Args:
+            inputs_tf (dict of tensors): all necessary inputs for the network: the
+                observation (o), the goal (g), and the action (u)
+            dimo (int): the dimension of the observations
+            dimg (int): the dimension of the goals
+            dimu (int): the dimension of the actions
+            max_u (float): the maximum magnitude of actions; action outputs will be scaled
+                accordingly
+            o_stats (baselines.her.Normalizer): normalizer for observations
+            g_stats (baselines.her.Normalizer): normalizer for goals
+            hidden (int): number of hidden units that should be used in hidden layers
+            layers (int): number of hidden layers
+        """
+        # Access to the environment type 
+        self.env = env.unwrapped
+        
+        # N-Arms
+        self.n_arms = n_arms
+        
+        self.o_tf = inputs_tf['o']
+        self.g_tf = inputs_tf['g']
+        self.u_tf = inputs_tf['u']
+
+        # Raw observations
+        #o_raw = self.o_tf[...,:self.env.o_ndx]
+        # Joint poses
+        joint_poses = self.o_tf[...,self.env.o_ndx:]
+        joint_poses = narm_reshape(joint_poses, n_arms)
+
+        # Normalization
+        o = self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx]
+        g = self.g_stats.normalize(self.g_tf)
+
+        # Expose for debugging
+        self.o_normalized = o
+        self.g_normalized = g
+
+        # Reshape inputs for the number of arms
+        u = narm_reshape(self.u_tf, n_arms)
+        o = narm_reshape(o, n_arms)
+        g = narm_reshape(g, n_arms)
+        
+        # Outputs
+        pi_tfs    = [None] * (n_arms-1)
+        Q_pi_tfs  = [None] * (n_arms-1)
+        Q_tfs     = [None] * (n_arms-1)
+        
+        for i in range(n_arms-1):
+
+            if i != (n_arms-2):
+                o_i = o[:, i]
+                u_i = u[:, i]
+                u_len = u_i.shape.as_list()[1]
+            else:
+                o_i = o[:, i:, 0]
+                u_i = u[:, i:, 0]
+                u_len = u_i.shape.as_list()[1]
+            
+            g_i = g[:, i]
+
+            input_pis_i = tf.concat(axis=1, values=[o_i, g_i])
+            
+            hidden = solve_quadratic(self.hidden, self.layers, dimo, dimg, dimu, n_arms, u_len)
+            with tf.variable_scope('pi{}'.format(i)):
+                pi_tfs[i] = self.max_u * tf.tanh(nn(
+                    input_pis_i, [hidden] * self.layers + [u_len]))
+
+            with tf.variable_scope('Q{}'.format(i)):
+                # for policy training
+                input_Q_1_i = tf.concat(axis=1, values=[o_i, g_i, pi_tfs[i] / self.max_u])
+                Q_pi_tfs[i] = nn(input_Q_1_i, [hidden] * self.layers + [1])
+                
+                # for critic training
+                input_Q_2_i = tf.concat(axis=1, values=[o_i, g_i, u_i / self.max_u])
+                Q_tfs[i] = nn(input_Q_2_i, [hidden] * self.layers + [1], reuse=True)
+
+        with tf.variable_scope('pi'):
+            self.pi_tf = tf.concat(axis=1, values=pi_tfs)
+
+
+        with tf.variable_scope('Q'):
+            # for policy training
+            self.Q_pi_tf = sum(Q_pi_tfs)
+            self.Q_tf    = sum(Q_tfs)
+
+        total_params()
 
 def total_params():
     total_parameters = 0
