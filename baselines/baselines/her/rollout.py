@@ -42,6 +42,8 @@ class RolloutWorker:
         self.reset_all_rollouts()
         self.clear_history()
 
+        self.kwargs = kwargs #FIXME
+
     def reset_all_rollouts(self):
         self.obs_dict = self.venv.reset()
         self.initial_o = self.obs_dict['observation']
@@ -112,12 +114,16 @@ class RolloutWorker:
             achieved_goals.append(ag.copy())
             successes.append(success.copy())
             acts.append(u.copy())
-            goals.append(self.g.copy())
+            #FIXME
+            #goals.append(self.g.copy())
+            goals.append(obs_dict_new['desired_goal'].copy())
+
             o[...] = o_new
             ag[...] = ag_new
+            self.g[...] = obs_dict_new['desired_goal'].copy()
         obs.append(o.copy())
         achieved_goals.append(ag.copy())
-
+    
         episode = dict(o=obs,
                        u=acts,
                        g=goals,

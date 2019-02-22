@@ -6,7 +6,7 @@ from os.path import join, basename
 import glob
 
 @keyword2cmdline.command
-def main(logs='logs-arm', n_arms=9, smooth=True, ttype='test'):
+def main(logs='logs-arm', n_arms=9, smooth=False, ttype='test'):
     print(logs)
     logs = glob.glob(join(logs, str(n_arms),'*'))
     print(logs)

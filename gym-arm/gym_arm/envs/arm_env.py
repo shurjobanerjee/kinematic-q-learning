@@ -34,7 +34,7 @@ class ArmEnv(gym.GoalEnv):
                  distance_threshold=1/20, 
                  n_arms=2, 
                  visible=True,
-                 achievable=True,
+                 achievable=False,
                  wrapper_kwargs={},
                  conn_type=None,
                  parts=None,
@@ -60,7 +60,7 @@ class ArmEnv(gym.GoalEnv):
         self.visible = visible
 
         # Separate observations based on indices
-        self.o_ndx, self.j_dim = self.preprocess_observation_ndxs()
+        self.o_ndx, self.j_dim, _ = self.preprocess_observation_ndxs()
 
         # Required for Goal-Env
         self.action_space = spaces.Box(-1., 1., shape=(n_arms,), dtype='float32')
@@ -78,13 +78,18 @@ class ArmEnv(gym.GoalEnv):
         """Couples together observations"""
         # Actual observation
         angles = self.arm_info[:,1].copy()
+        #angles = np.cumsum(angles) #FIXME
+        angles = np.asarray([[np.sin(a), np.cos(a)] for a in angles])
         # Additional information
         joint_poses = self.arm_info[:, 2:4]
-        return angles, joint_poses
+        # Addition joint length
+        joint_lengths = self.arm_info[:, 0]
+
+        return angles, joint_poses, joint_lengths
 
     def preprocess_observation_ndxs(self):
-        obs, jp = self.get_shaped_observations()
-        return np.prod(obs.shape), jp.shape[1]
+        obs, jp, jl = self.get_shaped_observations()
+        return np.prod(obs.shape), jp.shape[1], jl.shape
 
 
     def seed(self, seed=None):
@@ -194,10 +199,13 @@ class ArmEnv(gym.GoalEnv):
         desired_goal  = self.point_info.copy()
 
         if self.parts == 'area':
-            achieved_goal = np.asarray([achieved_goal - self.arm_info[i][2:4] \
+            achieved_goal_2 = np.asarray([achieved_goal - self.arm_info[i][2:4] \
                     for i in range(self.n_arms)]).flatten()
-            desired_goal  = np.asarray([desired_goal - self.arm_info[i][2:4] \
+            desired_goal_2  = np.asarray([desired_goal - self.arm_info[i][2:4] \
                     for i in range(self.n_arms)]).flatten()
+
+            achieved_goal = np.concatenate([achieved_goal, achieved_goal_2], 0)
+            desired_goal = np.concatenate([desired_goal, desired_goal_2], 0)
 
         return dict(
                 achieved_goal = achieved_goal,

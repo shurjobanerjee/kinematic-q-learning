@@ -95,10 +95,8 @@ class ActorCriticParts:
 
         # Normalization
         o = self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx]
-        if 'area' not in conn_type:
-            g = self.g_stats.normalize(self.g_tf)
-        else:
-            g = self.g_tf
+        #g = self.g_stats.normalize(self.g_tf)
+        g = self.g_tf
 
         # Expose for debugging
         self.o_normalized = o
@@ -116,13 +114,7 @@ class ActorCriticParts:
         for i in range(n_arms):
             o_i = o[:, i]
             u_i = u[:, i]
-            
-            if 'area' not in conn_type:
-                g_i = g
-            elif conn_type == 'area':
-                g_i = g - joint_poses[:, i]
-            elif conn_type == 'area_norm':
-                g_i = self.g_stats.normalize(g - joint_poses[:, i])
+            g_i = g - joint_poses[:, i]
             
             input_pis_i = tf.concat(axis=1, values=[o_i, g_i])
             
@@ -146,7 +138,7 @@ class ActorCriticParts:
 
         with tf.variable_scope('Q'):
             # for policy training
-            if conn_type in ['sums', 'area', 'area_norm', 'random']:
+            if conn_type in ['sums', 'random']:
                 self.Q_pi_tf = sum(Q_pi_tfs)
                 self.Q_tf    = sum(Q_tfs)
             
@@ -224,7 +216,7 @@ class ActorCriticArea:
         # Reshape inputs for the number of arms
         u = narm_reshape(self.u_tf, n_arms)
         o = narm_reshape(o, n_arms)
-        g = narm_reshape(g, n_arms)
+        g = narm_reshape(g, n_arms+1)
         
         # Outputs
         pi_tfs    = [None] * (n_arms-1)
