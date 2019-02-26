@@ -6,9 +6,9 @@ from os.path import join, basename
 import glob
 
 @keyword2cmdline.command
-def main(logs='logs-arm', n_arms=9, smooth=False, ttype='test'):
+def main(logs='logs-arm', hidden="32", n_arms="9", smooth=False, ttype='test'):
     print(logs)
-    logs = glob.glob(join(logs, str(n_arms),'*'))
+    logs = glob.glob(join(logs, str(n_arms), hidden, '*'))
     print(logs)
     for log in logs:
         print(log)

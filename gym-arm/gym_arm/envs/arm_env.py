@@ -15,7 +15,7 @@ import gym
 from gym import error, spaces
 from gym.utils import seeding
 
-pyglet.clock.set_fps_limit(15)
+pyglet.clock.set_fps_limit(30)
 
 def box(obs):
     return spaces.Box(-np.inf, np.inf, shape=obs.shape, dtype='float32')
@@ -60,7 +60,7 @@ class ArmEnv(gym.GoalEnv):
         self.visible = visible
 
         # Separate observations based on indices
-        self.o_ndx, self.j_dim, _ = self.preprocess_observation_ndxs()
+        self.o_ndx, self.j_dim = self.preprocess_observation_ndxs()
 
         # Required for Goal-Env
         self.action_space = spaces.Box(-1., 1., shape=(n_arms,), dtype='float32')
@@ -79,17 +79,14 @@ class ArmEnv(gym.GoalEnv):
         # Actual observation
         angles = self.arm_info[:,1].copy()
         #angles = np.cumsum(angles) #FIXME
-        angles = np.asarray([[np.sin(a), np.cos(a)] for a in angles])
+        #angles = np.asarray([[np.sin(a), np.cos(a)] for a in angles])
         # Additional information
-        joint_poses = self.arm_info[:, 2:4]
-        # Addition joint length
         joint_lengths = self.arm_info[:, 0]
-
-        return angles, joint_poses, joint_lengths
+        return angles, joint_lengths
 
     def preprocess_observation_ndxs(self):
-        obs, jp, jl = self.get_shaped_observations()
-        return np.prod(obs.shape), jp.shape[1], jl.shape
+        obs, jp = self.get_shaped_observations()
+        return np.prod(obs.shape), jp.shape
 
 
     def seed(self, seed=None):
@@ -204,8 +201,8 @@ class ArmEnv(gym.GoalEnv):
             desired_goal_2  = np.asarray([desired_goal - self.arm_info[i][2:4] \
                     for i in range(self.n_arms)]).flatten()
 
-            achieved_goal = np.concatenate([achieved_goal, achieved_goal_2], 0)
-            desired_goal = np.concatenate([desired_goal, desired_goal_2], 0)
+            #achieved_goal = np.concatenate([achieved_goal, achieved_goal_2], 0)
+            #desired_goal = np.concatenate([desired_goal, desired_goal_2], 0)
 
         return dict(
                 achieved_goal = achieved_goal,
@@ -220,7 +217,7 @@ class Viewer(pyglet.window.Window):
         'background': [1]*3 + [1]
     }
     fps_display = pyglet.clock.ClockDisplay()
-    scale_fac = 400
+    scale_fac = 200
     bar_thc = 5
     point_l = 1/20
     viewer_xy = (2*scale_fac, 2*scale_fac)

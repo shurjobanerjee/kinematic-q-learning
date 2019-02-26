@@ -16,10 +16,10 @@ DEFAULT_ENV_PARAMS = {
 
 DEFAULT_PARAMS = {
     # env
-    'max_u': 1.,  # max absolute value of actions on different coordinates
+    'max_u': .1,  # max absolute value of actions on different coordinates
     # ddpg
     'layers': 3,  # number of layers in the critic/actor networks
-    'hidden': 256,  # number of neurons in each hidden layers
+    'hidden': 16,  # number of neurons in each hidden layers
     'network_class': 'baselines.her.actor_critic:ActorCritic',
     'Q_lr': 0.001,  # critic learning rate
     'pi_lr': 0.001,  # actor learning rate
@@ -123,6 +123,8 @@ def prepare_params(params, **kwargs):
         ddpg_params['network_class'] = 'baselines.her.actor_critic:ActorCriticParts' 
     elif parts == 'area':
         ddpg_params['network_class'] = 'baselines.her.actor_critic:ActorCriticArea' 
+    elif parts == 'diff':
+        ddpg_params['network_class'] = 'baselines.her.actor_critic:ActorCriticDiff' 
     params['ddpg_params'] = ddpg_params
     
     return params
