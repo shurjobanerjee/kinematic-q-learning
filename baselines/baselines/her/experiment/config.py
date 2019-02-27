@@ -125,6 +125,8 @@ def prepare_params(params, **kwargs):
         ddpg_params['network_class'] = 'baselines.her.actor_critic:ActorCriticArea' 
     elif parts == 'diff':
         ddpg_params['network_class'] = 'baselines.her.actor_critic:ActorCriticDiff' 
+    elif parts == 'all':
+        ddpg_params['network_class'] = 'baselines.her.actor_critic:ActorCriticAll' 
     params['ddpg_params'] = ddpg_params
     
     return params

@@ -6,8 +6,7 @@ from tensorflow.math import sin as tsin
 
 class ActorCritic:
     @store_args
-    def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers, env=None,
-                 **kwargs):
+    def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers, env=None, n_arms=None, **kwargs):
         """The actor-critic network and related training code.
 
         Args:
@@ -31,16 +30,11 @@ class ActorCritic:
         self.env = env.unwrapped
 
         # End effector value
-        end_eff = self.o_tf[...,self.env.o_ndx2:]
+        #end_eff = self.o_tf[...,self.env.o_ndx2:]
         
         # Prepare inputs for actor and critic.
-        #o = self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx]
-        #g = self.g_stats.normalize(self.g_tf)
-        o = self.o_tf[...,:self.env.o_ndx]
-        g = self.g_tf 
-        #o = self.o_tf[...,:self.env.o_ndx]
-        
-        #self.g_diff = g - end_eff
+        o = self.o_tf[...,:self.env.o_ndx] #self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx
+        g = self.g_tf #- end_eff #self.g_stats.normalize(self.g_tf - end_eff)
         
         input_pi = tf.concat(axis=1, values=[o, g])  # for actor
         
@@ -62,10 +56,6 @@ class ActorCritic:
 
         total_params()
         
-        # Calculation of total params
-        #tp = 2*(self.layers-1)*self.hidden*self.hidden + (2*(dimo + self.dimg + self.dimu + self.layers) + 1)*self.hidden + self.dimu + 1
-
-
 
 def narm_reshape(x, n_arm):
     return tf.reshape(x, [-1, n_arm, x.get_shape().as_list()[-1]//n_arm])
@@ -154,11 +144,15 @@ class ActorCriticDiff:
 
         # End effector value
         end_eff = self.o_tf[...,self.env.o_ndx2:]
-        # Calculate the loss
-        L = tf.reduce_sum(tf.square(g-end_eff), axis=1, keepdims=True)
-        # Gradients of L wrt to end-effector
-        grad_end_eff = tf.gradients(L, end_eff)[0]
         
+        # Calculate the loss
+        #L = tf.reduce_sum(tf.square(g-end_eff), axis=1, keepdims=True)
+        # Compute the gradient of the loss using chain rule
+        #grad_end_eff = tf.gradients(L, end_eff)[0]
+        
+        grad_end_eff = -2*g # analytical gradient
+        gradL = tf.matmul(joint_jacp, tf.reshape(grad_end_eff, (-1, 3, 1)))
+    
         ###########################
         # Solve a quadratic to get equal no of params
         ##########################
@@ -178,9 +172,9 @@ class ActorCriticDiff:
             u_i = u[:, i]
             
             # Differentiation chain for method
-            g_i = tf.reduce_sum(grad_end_eff * joint_jacp[:,i], 1, keepdims=True)
+            #g_i = tf.reduce_sum(grad_end_eff * joint_jacp[:,i], 1, keepdims=True)
+            g_i = gradL[:,i]
 
-            
             # Input Pi
             input_pis_i = tf.concat(axis=1, values=[o_i, g_i])
             
@@ -238,3 +232,82 @@ def total_params():
         #print(variable_parameters)
         total_parameters += variable_parameters
     print("Total Params: {}".format(total_parameters))
+
+class ActorCriticAll:
+    @store_args
+    def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers, env=None, n_arms=None, **kwargs):
+        """The actor-critic network and related training code.
+
+        Args:
+            inputs_tf (dict of tensors): all necessary inputs for the network: the
+                observation (o), the goal (g), and the action (u)
+            dimo (int): the dimension of the observations
+            dimg (int): the dimension of the goals
+            dimu (int): the dimension of the actions
+            max_u (float): the maximum magnitude of actions; action outputs will be scaled
+                accordingly
+            o_stats (baselines.her.Normalizer): normalizer for observations
+            g_stats (baselines.her.Normalizer): normalizer for goals
+            hidden (int): number of hidden units that should be used in hidden layers
+            layers (int): number of hidden layers
+        """
+        self.o_tf  = inputs_tf['o']
+        self.g_tf  = inputs_tf['g']
+        self.u_tf  = inputs_tf['u']
+        self.ag_tf = inputs_tf['ag']
+
+        self.env = env.unwrapped
+
+        # End effector value
+        end_eff = self.o_tf[...,self.env.o_ndx2:]
+        
+        # Prepare inputs for actor and critic.
+        #o = self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx]
+        #g = self.g_stats.normalize(self.g_tf)
+        o = self.o_tf[...,:self.env.o_ndx]
+        #g = self.g_tf 
+        #o = self.o_tf[...,:self.env.o_ndx]
+        
+        # Jacobian vals
+        # Calculate the loss
+        joint_jacp = self.o_tf[...,self.env.o_ndx:self.env.o_ndx2]
+        joint_jacp = narm_reshape(joint_jacp, n_arms)
+        
+        #L = tf.reduce_sum(tf.square(g_old-end_eff), axis=1, keepdims=True)
+        # Compute the gradient of the loss using chain rule
+        #grad_end_eff = tf.gradients(L, end_eff)[0]
+        #gradL = tf.matmul(joint_jacp, tf.reshape(grad_end_eff, (-1, 3, 1)))
+        #g = gradL[...,0]
+        
+        # Analytical gradient
+        grad_end_eff = -2*self.g_tf
+        gradL = tf.matmul(joint_jacp, tf.reshape(grad_end_eff, (-1, 3, 1)))
+
+        g = gradL
+
+
+        
+        #self.g_diff = g - end_eff
+        
+        input_pi = tf.concat(axis=1, values=[o, g])  # for actor
+        
+
+        # Networks.
+        with tf.variable_scope('pi'):
+            self.pi_tf = self.max_u * tf.tanh(nn(
+                input_pi, [self.hidden] * self.layers + [self.dimu]))
+        
+        
+        with tf.variable_scope('Q'):
+            # for policy training
+            input_Q = tf.concat(axis=1, values=[o, g, self.pi_tf / self.max_u])
+            self.Q_pi_tf = nn(input_Q, [self.hidden] * self.layers + [1])
+            # for critic training
+            input_Q = tf.concat(axis=1, values=[o, g, self.u_tf / self.max_u])
+            self._input_Q = input_Q  # exposed for tests
+            self.Q_tf = nn(input_Q, [self.hidden] * self.layers + [1], reuse=True)
+
+        total_params()
+        
+        # Calculation of total params
+        #tp = 2*(self.layers-1)*self.hidden*self.hidden + (2*(dimo + self.dimg + self.dimu + self.layers) + 1)*self.hidden + self.dimu + 1

@@ -137,7 +137,7 @@ class DDPG(object):
         if compute_Q:
             vals += [policy.Q_pi_tf]
          
-        #vals += [policy.end_eff1, policy.end_eff2, policy.grad_end_eff1, policy.grad_end_eff2]
+        #vals += [policy.G, policy.AG, policy.g_e]
 
         # feed
         feed = {
@@ -148,7 +148,8 @@ class DDPG(object):
         }
 
         ret = self.sess.run(vals, feed_dict=feed)
-        #ret = ret[:-4]
+        #print(ret[-2].mean())
+        #print()
 
         # action postprocessing
         u = ret[0]

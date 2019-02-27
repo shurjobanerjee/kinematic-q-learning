@@ -15,7 +15,7 @@ def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='
 
     # Differentiate the method
     method = 'baseline' if parts is "None" else 'ours-{}'.format(parts)
-    relative_goals = False #True if parts is "None" else False
+    relative_goals = True #True if parts is "None" else False
     method = "{}-rel_goals-{}".format(method, relative_goals)
 
     # Experiment identifier if provided
