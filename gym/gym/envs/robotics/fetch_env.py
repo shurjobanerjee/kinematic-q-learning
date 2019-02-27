@@ -1,12 +1,14 @@
 import numpy as np
-
 from gym.envs.robotics import rotations, robot_env, utils
 
 
 def goal_distance(goal_a, goal_b):
+    #if not goal_a.shape == goal_b.shape:
+    #    import pdb; pdb.set_trace()
     assert goal_a.shape == goal_b.shape
     return np.linalg.norm(goal_a - goal_b, axis=-1)
 
+action_a = None
 
 class FetchEnv(robot_env.RobotEnv):
     """Superclass for all Fetch environments.
@@ -15,7 +17,7 @@ class FetchEnv(robot_env.RobotEnv):
     def __init__(
         self, model_path, n_substeps, gripper_extra_height, block_gripper,
         has_object, target_in_the_air, target_offset, obj_range, target_range,
-        distance_threshold, initial_qpos, reward_type, n_actions=4,
+        distance_threshold, initial_qpos, reward_type, n_actions=4, **kwargs
     ):
         """Initializes a new Fetch environment.
 
@@ -42,9 +44,10 @@ class FetchEnv(robot_env.RobotEnv):
         self.target_range = target_range
         self.distance_threshold = distance_threshold
         self.reward_type = reward_type
+
         super(FetchEnv, self).__init__(
             model_path=model_path, n_substeps=n_substeps, n_actions=n_actions,
-            initial_qpos=initial_qpos)
+            initial_qpos=initial_qpos, **kwargs)
 
     # GoalEnv methods
     # ----------------------------
@@ -78,8 +81,7 @@ class FetchEnv(robot_env.RobotEnv):
         if self.block_gripper:
             gripper_ctrl = np.zeros_like(gripper_ctrl)
         action = np.concatenate([pos_ctrl, rot_ctrl, gripper_ctrl])
-
-        # Apply action to simulation.
+        
         utils.ctrl_set_action(self.sim, action)
         utils.mocap_set_action(self.sim, action)
 
@@ -112,13 +114,13 @@ class FetchEnv(robot_env.RobotEnv):
             grip_pos, object_pos.ravel(), object_rel_pos.ravel(), gripper_state, object_rot.ravel(),
             object_velp.ravel(), object_velr.ravel(), grip_velp, gripper_vel,
         ])
-
+        
         return {
             'observation': obs.copy(),
             'achieved_goal': achieved_goal.copy(),
             'desired_goal': self.goal.copy(),
-            'end_eff': self.goal.copy()
         }
+
 
     def _viewer_setup(self):
         body_id = self.sim.model.body_name2id('robot0:gripper_link')
@@ -136,7 +138,15 @@ class FetchEnv(robot_env.RobotEnv):
         self.sim.model.site_pos[site_id] = self.goal - sites_offset[0]
         self.sim.forward()
 
-    def _reset_sim(self):
+    def _reset_sim(self, random_start=True):
+        #self.sim.set_state(self.initial_state)
+        if random_start:
+            sim = self.sim
+            for i in range(len(self.sim.model.actuator_names)):
+                jidx = sim.model.actuator_trnid[i, 0]
+                idx = sim.model.jnt_qposadr[jidx]
+                val = np.pi*(2*np.random.rand()-1)
+                self.initial_state.qpos[idx] = val
         self.sim.set_state(self.initial_state)
 
         # Randomize start position of object.
@@ -160,7 +170,10 @@ class FetchEnv(robot_env.RobotEnv):
             if self.target_in_the_air and self.np_random.uniform() < 0.5:
                 goal[2] += self.np_random.uniform(0, 0.45)
         else:
-            goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-0.15, 0.15, size=3)
+            self._reset_sim(random_start=True)
+            goal = self.sim.data.get_site_xpos('robot0:grip').copy()
+            self._reset_sim(random_start=True)
+            
         return goal.copy()
 
     def _is_success(self, achieved_goal, desired_goal):

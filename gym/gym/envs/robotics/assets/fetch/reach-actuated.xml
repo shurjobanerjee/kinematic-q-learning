@@ -31,8 +31,10 @@
           <position ctrllimited="true" ctrlrange="-2.251 2.251" joint="robot0:elbow_flex_joint" kp="20654.9" name="robot0:elbow_flex_joint"></position>
           <position ctrllimited="true" ctrlrange="-3.14 3.14" joint="robot0:forearm_roll_joint" kp="32.4116" name="robot0:forearm_roll_joint"></position>
           <position ctrllimited="true" ctrlrange="-2.16 2.16" joint="robot0:wrist_flex_joint" kp="1000" name="robot0:wrist_flex_joint"></position>
-          <position ctrllimited="true" ctrlrange="-3.14 3.14" joint="robot0:wrist_roll_joint" kp="432.743" name="robot0:wrist_roll_joint"></position>
-          <position ctrllimited="true" ctrlrange="0 0.2" joint="robot0:l_gripper_finger_joint" kp="10000" name="robot0:l_gripper_finger_joint" user="1"></position>
-          <position ctrllimited="true" ctrlrange="0 0.2" joint="robot0:r_gripper_finger_joint" kp="10000" name="robot0:r_gripper_finger_joint" user="1"></position>
+          <!--
+          <position ctrllimited="false" ctrlrange="-3.14 3.14" joint="robot0:wrist_roll_joint" kp="432.743" name="robot0:wrist_roll_joint"></position>
+          <position ctrllimited="false" ctrlrange="0 0.2" joint="robot0:l_gripper_finger_joint" kp="10000" name="robot0:l_gripper_finger_joint" user="1"></position>
+          <position ctrllimited="false" ctrlrange="0 0.2" joint="robot0:r_gripper_finger_joint" kp="10000" name="robot0:r_gripper_finger_joint" user="1"></position>
+          -->
       </actuator>
 </mujoco>

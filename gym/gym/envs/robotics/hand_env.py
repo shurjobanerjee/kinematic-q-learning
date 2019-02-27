@@ -9,12 +9,12 @@ from gym.envs.robotics import robot_env
 
 
 class HandEnv(robot_env.RobotEnv):
-    def __init__(self, model_path, n_substeps, initial_qpos, relative_control):
+    def __init__(self, model_path, n_substeps, initial_qpos, relative_control, **kwargs):
         self.relative_control = relative_control
 
         super(HandEnv, self).__init__(
             model_path=model_path, n_substeps=n_substeps, n_actions=20,
-            initial_qpos=initial_qpos)
+            initial_qpos=initial_qpos, **kwargs)
 
     # RobotEnv methods
     # ----------------------------

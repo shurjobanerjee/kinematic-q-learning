@@ -1,5 +1,6 @@
 import numpy as np
 from gym import error
+from pprint import pprint
 
 try:
     import mujoco_py
@@ -20,14 +21,76 @@ def robot_get_obs(sim):
     return np.zeros(0), np.zeros(0)
 
 
-def get_joint_xposes(sim):
-    bodyname2xpos = dict(zip(sim.model.body_names, sim.data.body_xpos))
-    joint_names = sim.model.actuator_names
-    joint_ids = [sim.model.joint_name2id(name) for name in joint_names]
-    # if above thing produces error then actuator_names are not same as joint_names
-    joint_poses = [sim.data.body_xpos[sim.model.jnt_bodyid[i]] for i in joint_ids]
-    joint_qpos = [sim.data.qpos[i] for i in joint_ids]
-    return joint_poses, joint_qpos
+def apply_trans(trans, x):
+    rot, pos = trans
+    return rot.dot(x) + pos
+
+
+def invert_trans(trans):
+    rot, pos = trans
+    return rot.T, -rot.T.dot(pos)
+
+
+def apply_inv_trans(trans, x):
+    rot, pos = trans
+    return x - pos
+    #return rot.T.dot(x) + pos
+    #return rot.T.dot(x - pos)
+
+
+class Trans:
+    __slots__ = ("trans",)
+    def __init__(self, rot, pos):
+        self.trans = (rot, pos)
+
+    def __call__(self, x):
+        return apply_trans(self.trans, x)
+
+    def invert(self):
+        return type(self)(*invert_trans(self.trans))
+
+    def apply_inv(self, x):
+        return apply_inv_trans(self.trans,  x)
+
+class PosT:
+    __slots__ = ("trans",)
+    def __init__(self, rot, pos):
+        self.trans = pos
+
+    def __call__(self, x):
+        return x + self.trans
+
+    def apply_inv(self, x):
+        return x - self.trans
+
+
+def rotmat(theta_y):
+    return np.array([[np.cos(theta_y), 0, np.sin(theta_y)],
+        [0, 1, 0],
+        [-np.sin(theta_y), 0, np.cos(theta_y)]])
+
+
+def get_joint_xposes(sim, trans_class=Trans, D=3):
+    
+    joint_jacobians_all = sim.data.get_site_jacp('robot0:grip').copy().reshape((3,-1))
+    
+    joint_transforms, joint_qpos, joint_jacps = [], [], []
+    for i in range(len(sim.model.actuator_names)):
+        jidx = sim.model.actuator_trnid[i, 0]
+        qposidx = sim.model.jnt_qposadr[jidx]
+        pos = sim.data.body_xpos[sim.model.jnt_bodyid[jidx]]
+        xmat = sim.data.body_xmat[sim.model.jnt_bodyid[jidx]]
+        jacobian = joint_jacobians_all[:,qposidx]
+
+        rot = xmat.reshape(D, D)
+        joint_transforms.append(trans_class(rot, pos))
+        joint_qpos.append(sim.data.qpos[qposidx])
+        joint_jacps.append(jacobian)
+    
+    grip_pos = sim.data.get_site_xpos('robot0:grip').copy()
+
+    return joint_transforms, joint_qpos, joint_jacps, grip_pos
+
 
 
 def full_ctrl_set_action(sim, action):

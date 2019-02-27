@@ -117,6 +117,7 @@ class DDPG(object):
             ag = ag.reshape(-1, self.dimg)
             g = self.subtract_goals(g, ag)
             g = g.reshape(*g_shape)
+
         o = np.clip(o, -self.clip_obs, self.clip_obs)
         g = np.clip(g, -self.clip_obs, self.clip_obs)
         return o, g
@@ -129,19 +130,26 @@ class DDPG(object):
     def get_actions(self, o, ag, g, noise_eps=0., random_eps=0., use_target_net=False,
                     compute_Q=False):
         o, g = self._preprocess_og(o, ag, g)
+
         policy = self.target if use_target_net else self.main
         # values to compute
         vals = [policy.pi_tf]
         if compute_Q:
             vals += [policy.Q_pi_tf]
+         
+        #vals += [policy.end_eff1, policy.end_eff2, policy.grad_end_eff1, policy.grad_end_eff2]
+
         # feed
         feed = {
-            policy.o_tf: o.reshape(-1, self.dimo),
-            policy.g_tf: g.reshape(-1, self.dimg),
-            policy.u_tf: np.zeros((o.size // self.dimo, self.dimu), dtype=np.float32)
+            policy.o_tf : o.reshape(-1, self.dimo),
+            policy.g_tf : g.reshape(-1, self.dimg),
+            policy.ag_tf: ag.reshape(-1, self.dimg),
+            policy.u_tf : np.zeros((o.size // self.dimo, self.dimu), dtype=np.float32)
         }
 
         ret = self.sess.run(vals, feed_dict=feed)
+        #ret = ret[:-4]
+
         # action postprocessing
         u = ret[0]
         noise = noise_eps * self.max_u * np.random.randn(*u.shape)  # gaussian noise

@@ -16,7 +16,7 @@ DEFAULT_ENV_PARAMS = {
 
 DEFAULT_PARAMS = {
     # env
-    'max_u': .1,  # max absolute value of actions on different coordinates
+    'max_u': 1,  # max absolute value of actions on different coordinates
     # ddpg
     'layers': 3,  # number of layers in the critic/actor networks
     'hidden': 16,  # number of neurons in each hidden layers
@@ -116,7 +116,7 @@ def prepare_params(params, **kwargs):
         del params[name]
     
     # HER by parts of Regular HER
-    parts = kwargs['parts']
+    parts = kwargs.get('parts', 'None')
     if parts == 'None':
         ddpg_params['network_class'] = 'baselines.her.actor_critic:ActorCritic' 
     elif parts == 'sepq':
@@ -204,9 +204,10 @@ def configure_dims(params, **kwargs):
     obs, _, _, info = env.step(env.action_space.sample())
     
     dims = {
-        'o': obs['observation'].shape[0],
-        'u': env.action_space.shape[0],
-        'g': obs['desired_goal'].shape[0],
+        'o' : obs['observation'].shape[0],
+        'u' : env.action_space.shape[0],
+        'g' : obs['desired_goal'].shape[0],
+        'ag': obs['achieved_goal'].shape[0],
     }
     for key, value in info.items():
         value = np.array(value)

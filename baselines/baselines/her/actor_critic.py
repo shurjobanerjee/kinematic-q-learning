@@ -23,16 +23,24 @@ class ActorCritic:
             hidden (int): number of hidden units that should be used in hidden layers
             layers (int): number of hidden layers
         """
-        self.o_tf = inputs_tf['o']
-        self.g_tf = inputs_tf['g']
-        self.u_tf = inputs_tf['u']
+        self.o_tf  = inputs_tf['o']
+        self.g_tf  = inputs_tf['g']
+        self.u_tf  = inputs_tf['u']
+        self.ag_tf = inputs_tf['ag']
 
         self.env = env.unwrapped
 
+        # End effector value
+        end_eff = self.o_tf[...,self.env.o_ndx2:]
+        
         # Prepare inputs for actor and critic.
-        o = self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx]
-        dimo = o.shape.as_list()[-1]
-        g = self.g_stats.normalize(self.g_tf)
+        #o = self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx]
+        #g = self.g_stats.normalize(self.g_tf)
+        o = self.o_tf[...,:self.env.o_ndx]
+        g = self.g_tf 
+        #o = self.o_tf[...,:self.env.o_ndx]
+        
+        #self.g_diff = g - end_eff
         
         input_pi = tf.concat(axis=1, values=[o, g])  # for actor
         
@@ -42,7 +50,6 @@ class ActorCritic:
             self.pi_tf = self.max_u * tf.tanh(nn(
                 input_pi, [self.hidden] * self.layers + [self.dimu]))
         
-        tp1 = (dimo + self.dimg + self.layers + self.dimu)*self.hidden  + (self.layers-1) * self.hidden * self.hidden + self.dimu
         
         with tf.variable_scope('Q'):
             # for policy training
@@ -52,8 +59,6 @@ class ActorCritic:
             input_Q = tf.concat(axis=1, values=[o, g, self.u_tf / self.max_u])
             self._input_Q = input_Q  # exposed for tests
             self.Q_tf = nn(input_Q, [self.hidden] * self.layers + [1], reuse=True)
-
-        tp2 = ((dimo + self.dimg + self.layers + self.dimu + 1)*self.hidden  + (self.layers-1) * self.hidden * self.hidden + 1)
 
         total_params()
         
@@ -119,15 +124,14 @@ class ActorCriticDiff:
         self.o_tf = inputs_tf['o']
         self.g_tf = inputs_tf['g']
         self.u_tf = inputs_tf['u']
+        self.ag_tf = inputs_tf['ag']
 
         # Raw observations
         #o_raw = self.o_tf[...,:self.env.o_ndx]
         # Joint poses
-        joint_poses = self.o_tf[...,self.env.o_ndx:]
-        joint_poses = narm_reshape(joint_poses, n_arms)
 
         # Normalization
-        o = self.o_tf[...,:self.env.o_ndx] #self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx]
+        o = self.o_tf[...,:self.env.o_ndx] #self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx
         g = self.g_tf #self.g_stats.normalize(self.g_tf)
 
         # Expose for debugging
@@ -139,24 +143,22 @@ class ActorCriticDiff:
         o = narm_reshape(o, n_arms)
         #g = narm_reshape(g, n_arms+1)
         
-        # Compute goal in end-effector frame
-        l  = self.o_tf[:,self.env.o_ndx:]
-        end_eff = compute_end_eff_pos(l, o, g, self.n_arms)
-        
         # Outputs
         pi_tfs    = [None] * n_arms
         Q_pi_tfs  = [None] * n_arms
         Q_tfs     = [None] * n_arms
         
-        # Gradient of the end-effector with respect to states
-        #L = tf.norm(g - end_eff, axis=1, keepdims=True)
-        L = tf.reduce_sum(tf.square(g-end_eff), axis=1, keepdims=True)
-        grads = tf.gradients(L, o)[0]
-        
-        #grads_x = tf.gradients(end_eff[:,0], o)[0]
-        #grads_y = tf.gradients(end_eff[:,1], o)[0]
-        #grads  = tf.concat(axis=2, values=[grads_x, grads_y])
+        # Jacobian vals
+        joint_jacp = self.o_tf[...,self.env.o_ndx:self.env.o_ndx2]
+        joint_jacp = narm_reshape(joint_jacp, n_arms)
 
+        # End effector value
+        end_eff = self.o_tf[...,self.env.o_ndx2:]
+        # Calculate the loss
+        L = tf.reduce_sum(tf.square(g-end_eff), axis=1, keepdims=True)
+        # Gradients of L wrt to end-effector
+        grad_end_eff = tf.gradients(L, end_eff)[0]
+        
         ###########################
         # Solve a quadratic to get equal no of params
         ##########################
@@ -165,19 +167,21 @@ class ActorCriticDiff:
         dimg = self.dimg
         dimu = self.dimu
         dimo2 = o[:,0].shape.as_list()[-1]
-        dimg2 = grads[:,0].shape.as_list()[-1]
+        dimg2 = 1 #grads[:,0].shape.as_list()[-1]
         dimu2 = u[:,0].shape.as_list()[-1]
         H = self.hidden
         n = n_arms
-        hidden = solve_quadratic(l, dimo, dimg, dimu, dimo2, dimg2, dimu2, H, n) 
+        hidden = solve_quadratic(l, dimo, dimg, dimu, dimo2, dimg2, dimu2, H, n)-1 
         
         for i in range(n_arms):
             o_i = o[:, i]
             u_i = u[:, i]
             
             # Differentiation chain for method
-            g_i = grads[:, i]
+            g_i = tf.reduce_sum(grad_end_eff * joint_jacp[:,i], 1, keepdims=True)
 
+            
+            # Input Pi
             input_pis_i = tf.concat(axis=1, values=[o_i, g_i])
             
             with tf.variable_scope('pi{}'.format(i)):
@@ -192,6 +196,8 @@ class ActorCriticDiff:
                 # for critic training
                 input_Q_2_i = tf.concat(axis=1, values=[o_i, g_i, u_i / self.max_u])
                 Q_tfs[i] = nn(input_Q_2_i, [hidden] * self.layers + [1], reuse=True)
+            #total_params()
+            #tp = 2*(self.layers-1)*hidden*hidden + (2*(2 + 1 + 1 + self.layers) + 1)*hidden + (1 + 1)
 
         with tf.variable_scope('pi'):
             self.pi_tf = tf.concat(axis=1, values=pi_tfs)
@@ -207,16 +213,16 @@ class ActorCriticDiff:
 
 
 def solve_quadratic(l, o, g, u, o2, g2, u2, H, n):
-    a = 2*(l-1)
-    b = 2*(o2+g2+u2+l) + 1
+    a   = 2*(l-1)
+    b   = 2*(o2+g2+u2+l) + 1
     c_1 = (u2+1)
     c_2 = - 2*(l-1)*H*H/n
     c_3 = -(2*(o+g+u)+1)*H/n
     c_4 = -(u+1)/n
-    c = c_1 + c_2 + c_3 + c_4
+    c   = c_1 + c_2 + c_3 + c_4
     hidden = (- b + np.sqrt(b**2-4*a*c))/(2*a)
 
-    return int(hidden+.5)
+    return int(hidden)
 
 def total_params():
     total_parameters = 0

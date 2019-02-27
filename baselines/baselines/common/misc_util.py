@@ -5,6 +5,7 @@ import pickle
 import random
 import tempfile
 import zipfile
+from ctypes import CDLL
 
 
 def zipsame(*seqs):
@@ -81,7 +82,7 @@ def set_global_seeds(i):
         pass
     np.random.seed(myseed)
     random.seed(myseed)
-
+    #CDLL("libc.so.6").srand(myseed)
 
 def pretty_eta(seconds_left):
     """Print the number of seconds in human readable format.

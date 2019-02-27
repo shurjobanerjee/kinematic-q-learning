@@ -123,7 +123,6 @@ class RolloutWorker:
             self.g[...] = obs_dict_new['desired_goal'].copy()
         obs.append(o.copy())
         achieved_goals.append(ag.copy())
-    
         episode = dict(o=obs,
                        u=acts,
                        g=goals,

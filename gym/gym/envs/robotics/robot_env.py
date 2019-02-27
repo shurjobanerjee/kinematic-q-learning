@@ -11,17 +11,21 @@ try:
 except ImportError as e:
     raise error.DependencyNotInstalled("{}. (HINT: you need to install mujoco_py, and also perform the setup instructions here: https://github.com/openai/mujoco-py/.)".format(e))
 
+def fullpath_from_rel(model_path):
+    if model_path.startswith('/'):
+        fullpath = model_path
+    else:
+        fullpath = os.path.join(os.path.dirname(__file__), 'assets', model_path)
+
+    if not os.path.exists(fullpath):
+        raise IOError('File {} does not exist'.format(fullpath))
+
+    return fullpath
+
 
 class RobotEnv(gym.GoalEnv):
-    def __init__(self, model_path, initial_qpos, n_actions, n_substeps):
-        if model_path.startswith('/'):
-            fullpath = model_path
-        else:
-            fullpath = os.path.join(os.path.dirname(__file__), 'assets', model_path)
-        if not os.path.exists(fullpath):
-            raise IOError('File {} does not exist'.format(fullpath))
-
-        model = mujoco_py.load_model_from_path(fullpath)
+    def __init__(self, model_path, initial_qpos, n_actions, n_substeps, **kwargs):
+        model = mujoco_py.load_model_from_path(fullpath_from_rel(model_path))
         self.sim = mujoco_py.MjSim(model, nsubsteps=n_substeps)
         self.viewer = None
 
@@ -60,12 +64,13 @@ class RobotEnv(gym.GoalEnv):
         self.sim.step()
         self._step_callback()
         obs = self._get_obs()
-
         done = False
+       
         info = {
-            'is_success': self._is_success(obs['achieved_goal'], self.goal),
+            'is_success': self._is_success(obs['achieved_goal'], self.goal)
         }
         reward = self.compute_reward(obs['achieved_goal'], self.goal, info)
+
         return obs, reward, done, info
 
     def reset(self):
