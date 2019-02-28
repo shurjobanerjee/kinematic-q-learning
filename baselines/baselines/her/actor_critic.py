@@ -37,7 +37,6 @@ class ActorCritic:
         g = self.g_tf #- end_eff #self.g_stats.normalize(self.g_tf - end_eff)
         
         input_pi = tf.concat(axis=1, values=[o, g])  # for actor
-        
 
         # Networks.
         with tf.variable_scope('pi'):
@@ -143,16 +142,17 @@ class ActorCriticDiff:
         joint_jacp = narm_reshape(joint_jacp, n_arms)
 
         # End effector value
-        end_eff = self.o_tf[...,self.env.o_ndx2:]
+        #end_eff = self.o_tf[...,self.env.o_ndx2:]
         
         # Calculate the loss
         #L = tf.reduce_sum(tf.square(g-end_eff), axis=1, keepdims=True)
         # Compute the gradient of the loss using chain rule
         #grad_end_eff = tf.gradients(L, end_eff)[0]
         
+        # This gradient makes the assumption of relative gradients!!
         grad_end_eff = -2*g # analytical gradient
-        gradL = tf.matmul(joint_jacp, tf.reshape(grad_end_eff, (-1, 3, 1)))
-    
+        gradL = tf.matmul(joint_jacp, tf.reshape(grad_end_eff, (-1, dimg, 1)))
+        
         ###########################
         # Solve a quadratic to get equal no of params
         ##########################
@@ -165,7 +165,7 @@ class ActorCriticDiff:
         dimu2 = u[:,0].shape.as_list()[-1]
         H = self.hidden
         n = n_arms
-        hidden = solve_quadratic(l, dimo, dimg, dimu, dimo2, dimg2, dimu2, H, n)-1 
+        hidden = 5#solve_quadratic(l, dimo, dimg, dimu, dimo2, dimg2, dimu2, H, n)-1 
         
         for i in range(n_arms):
             o_i = o[:, i]

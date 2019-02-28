@@ -49,18 +49,19 @@ class FetchReachActEnv(fetch_env.FetchEnv, utils.EzPickle):
     
     def _get_obs(self):
         obs = super(FetchReachActEnv, self)._get_obs()
-        joint_transforms, joint_qpos, joint_jacp, end_pose  = gerutils.get_joint_xposes(self.sim)
+        joint_qpos, joint_qvel, joint_jacp  = gerutils.get_joint_xposes(self.sim)
         
-        # Traditional observation
-        observation = np.asarray(joint_qpos)
-        observation = [[np.sin(o), np.cos(o)] for o in observation]
+        # Same observation as for hand tasks
+        #observation = np.concatenate((joint_qpos, joint_qvel, grip_pose), 0)
+        #observation = [[np.sin(o), np.cos(o)] for o in joint_qpos]
+        observation = np.asarray([list(q) for q in zip(joint_qpos, joint_qvel)]).flatten()
         observation = np.asarray(observation).flatten()
+        
         jacp = np.asarray(joint_jacp).flatten()
-        end_pose = np.asarray(end_pose)
 
         if self.o_ndx is None:
             self.o_ndx = np.prod(observation.shape)
             self.o_ndx2 = self.o_ndx + np.prod(jacp.shape)
 
-        obs['observation'] = np.concatenate((observation, jacp, end_pose), 0)
+        obs['observation'] = np.concatenate((observation, jacp), 0)
         return obs 

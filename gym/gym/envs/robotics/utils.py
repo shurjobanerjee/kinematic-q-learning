@@ -8,17 +8,6 @@ except ImportError as e:
     raise error.DependencyNotInstalled("{}. (HINT: you need to install mujoco_py, and also perform the setup instructions here: https://github.com/openai/mujoco-py/.)".format(e))
 
 
-def robot_get_obs(sim):
-    """Returns all joint positions and velocities associated with
-    a robot.
-    """
-    if sim.data.qpos is not None and sim.model.joint_names:
-        names = [n for n in sim.model.joint_names if n.startswith('robot')]
-        return (
-            np.array([sim.data.get_joint_qpos(name) for name in names]),
-            np.array([sim.data.get_joint_qvel(name) for name in names]),
-        )
-    return np.zeros(0), np.zeros(0)
 
 
 def apply_trans(trans, x):
@@ -70,26 +59,36 @@ def rotmat(theta_y):
         [-np.sin(theta_y), 0, np.cos(theta_y)]])
 
 
-def get_joint_xposes(sim, trans_class=Trans, D=3):
+def get_jacp(sim):
+    return sim.data.get_site_jacp('robot0:grip').copy().reshape((3,-1)).T
+
+def get_joint_xposes(sim, jacp=None):
     
-    joint_jacobians_all = sim.data.get_site_jacp('robot0:grip').copy().reshape((3,-1))
+    joint_jacobians_all = jacp if jacp is not None else get_jacp(sim) 
     
-    joint_transforms, joint_qpos, joint_jacps = [], [], []
+    joint_qpos, joint_qvel, joint_jacps = [], [], []
     for i in range(len(sim.model.actuator_names)):
         jidx = sim.model.actuator_trnid[i, 0]
         qposidx = sim.model.jnt_qposadr[jidx]
-        pos = sim.data.body_xpos[sim.model.jnt_bodyid[jidx]]
-        xmat = sim.data.body_xmat[sim.model.jnt_bodyid[jidx]]
-        jacobian = joint_jacobians_all[:,qposidx]
+        jacobian = joint_jacobians_all[qposidx]
 
-        rot = xmat.reshape(D, D)
-        joint_transforms.append(trans_class(rot, pos))
         joint_qpos.append(sim.data.qpos[qposidx])
+        joint_qvel.append(sim.data.qvel[qposidx])
         joint_jacps.append(jacobian)
     
-    grip_pos = sim.data.get_site_xpos('robot0:grip').copy()
+    return [np.asarray(x) for x in [joint_qpos, joint_qvel, joint_jacps]]
 
-    return joint_transforms, joint_qpos, joint_jacps, grip_pos
+def robot_get_obs(sim):
+    """Returns all joint positions and velocities associated with
+    a robot.
+    """
+    if sim.data.qpos is not None and sim.model.joint_names:
+        names = [n for n in sim.model.joint_names if n.startswith('robot')]
+        return (
+            np.array([sim.data.get_joint_qpos(name) for name in names]),
+            np.array([sim.data.get_joint_qvel(name) for name in names]),
+        )
+    return np.zeros(0), np.zeros(0)
 
 
 

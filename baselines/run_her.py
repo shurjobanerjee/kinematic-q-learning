@@ -9,6 +9,9 @@ def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='
     if env == 'Arm':
         model = mujoco_py.load_model_from_path("/home/shurjo/local_projects/kinematic-q-learning/gym/gym/envs/robotics/assets/fetch/reach-actuated.xml")
         n_arms = len(model.actuator_names)
+    elif env == "Hand":
+        model = mujoco_py.load_model_from_path("/home/shurjo/local_projects/kinematic-q-learning/gym/gym/envs/robotics/assets/hand/reach.xml")
+        n_arms = len(model.actuator_names)
 
     # Governs whether to show a test simulation
     play = "" if not play else "--play"
@@ -35,6 +38,16 @@ def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='
                    python -m baselines.run 
                    --alg=her 
                    --env=FetchReachAct-v1 
+                   --num_timesteps={} 
+                   --n_arms {}
+                   {} 
+                   """.format(store_logs, num_timesteps, n_arms, play)
+    elif env == "Hand":
+        command = """
+                   {} 
+                   python -m baselines.run 
+                   --alg=her 
+                   --env=HandReach-v0 
                    --num_timesteps={} 
                    --n_arms {}
                    {} 

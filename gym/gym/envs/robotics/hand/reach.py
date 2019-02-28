@@ -4,6 +4,7 @@ import numpy as np
 from gym import utils
 from gym.envs.robotics import hand_env
 from gym.envs.robotics.utils import robot_get_obs
+from gym.envs.robotics import utils as gerutils
 
 
 FINGERTIP_SITE_NAMES = [
@@ -57,6 +58,7 @@ class HandReachEnv(hand_env.HandEnv, utils.EzPickle):
         self, distance_threshold=0.01, n_substeps=20, relative_control=False,
         initial_qpos=DEFAULT_INITIAL_QPOS, reward_type='sparse', **kwargs
     ):
+        self.o_ndx = None
         self.distance_threshold = distance_threshold
         self.reward_type = reward_type
 
@@ -68,6 +70,12 @@ class HandReachEnv(hand_env.HandEnv, utils.EzPickle):
     def _get_achieved_goal(self):
         goal = [self.sim.data.get_site_xpos(name) for name in FINGERTIP_SITE_NAMES]
         return np.array(goal).flatten()
+    
+    def _get_joint_jacp(self):
+        jacps = [self.sim.data.get_site_jacp(name).reshape((3,-1)).T \
+                for name in FINGERTIP_SITE_NAMES]
+        jacps = np.concatenate(jacps, 1)
+        return jacps
 
     # GoalEnv methods
     # ----------------------------
@@ -91,15 +99,52 @@ class HandReachEnv(hand_env.HandEnv, utils.EzPickle):
         self.palm_xpos = self.sim.data.body_xpos[self.sim.model.body_name2id('robot0:palm')].copy()
 
     def _get_obs(self):
-        robot_qpos, robot_qvel = robot_get_obs(self.sim)
+        """
+        Observations wrt to actuator
+        """
+        robot_jacp = self._get_joint_jacp()
+        joint_qpos, joint_qvel, joint_jacp  = gerutils.get_joint_xposes(self.sim, robot_jacp)
+        #robot_qpos, robot_qvel = robot_get_obs(self.sim)
         achieved_goal = self._get_achieved_goal().ravel()
-        observation = np.concatenate([robot_qpos, robot_qvel, achieved_goal])
+        observation = np.asarray([list(q) for q in zip(joint_qpos, joint_qvel)]).flatten()
+        jacp = joint_jacp
+        if self.o_ndx is None:
+            self.o_ndx = np.prod(observation.shape)
+            self.o_ndx2 = self.o_ndx + np.prod(jacp.shape)
+        observation = np.concatenate((observation, jacp.flatten()))
+        
+        # Add jacobian information
         return {
             'observation': observation.copy(),
             'achieved_goal': achieved_goal.copy(),
             'desired_goal': self.goal.copy(),
         }
 
+    #def _get_obs(self):
+    #    robot_qpos, robot_qvel = robot_get_obs(self.sim)
+    #    achieved_goal = self._get_achieved_goal().ravel()
+    #    return {
+    #        'observation': observation.copy(),
+    #        'achieved_goal': achieved_goal.copy(),
+    #        'desired_goal': self.goal.copy(),
+    #    }
+    #    
+    #    obs = super(FetchReachActEnv, self)._get_obs()
+    #    joint_qpos, joint_qvel, joint_jacp, grip_pose  = gerutils.get_joint_xposes(self.sim)
+    #    
+    #    # Same observation as for hand tasks
+    #    #observation = np.concatenate((joint_qpos, joint_qvel, grip_pose), 0)
+    #    #observation = [[np.sin(o), np.cos(o)] for o in joint_qpos]
+    #    observation = np.asarray([list(q) for q in zip(joint_qpos, joint_qvel)]).flatten()
+    #    observation = np.asarray(observation).flatten()
+    #    jacp = np.asarray(joint_jacp).flatten()
+    #    if self.o_ndx is None:
+    #        self.o_ndx = np.prod(observation.shape)
+    #        self.o_ndx2 = self.o_ndx + np.prod(jacp.shape)
+
+    #    obs['observation'] = np.concatenate((observation, jacp, grip_pose), 0)
+    #    return obs 
+    
     def _sample_goal(self):
         thumb_name = 'robot0:S_thtip'
         finger_names = [name for name in FINGERTIP_SITE_NAMES if name != thumb_name]
@@ -129,7 +174,7 @@ class HandReachEnv(hand_env.HandEnv, utils.EzPickle):
 
     def _is_success(self, achieved_goal, desired_goal):
         d = goal_distance(achieved_goal, desired_goal)
-        return (d < self.distance_threshold).astype(np.float32)
+        return d #(d < self.distance_threshold).astype(np.float32)
 
     def _render_callback(self):
         # Visualize targets.
