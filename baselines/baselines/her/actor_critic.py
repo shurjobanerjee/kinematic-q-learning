@@ -165,7 +165,7 @@ class ActorCriticDiff:
         dimu2 = u[:,0].shape.as_list()[-1]
         H = self.hidden
         n = n_arms
-        hidden = 5#solve_quadratic(l, dimo, dimg, dimu, dimo2, dimg2, dimu2, H, n)-1 
+        hidden = solve_quadratic(l, dimo, dimg, dimu, dimo2, dimg2, dimu2, H, n)-1 
         
         for i in range(n_arms):
             o_i = o[:, i]

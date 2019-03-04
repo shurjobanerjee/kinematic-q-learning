@@ -12,8 +12,6 @@ future==0.17.1
 gast==0.2.2
 glfw==1.7.0
 grpcio==1.18.0
--e git+git@github.com:shurjobanerjee/kinematic-q-learning.git@ea42a4fb75b647056f9a36659e2d727b312c8a89#egg=gym&subdirectory=gym
--e git+git@github.com:shurjobanerjee/kinematic-q-learning.git@ea42a4fb75b647056f9a36659e2d727b312c8a89#egg=gym_arm&subdirectory=gym-arm
 h5py==2.9.0
 idna==2.8
 imageio==2.4.1

@@ -7,7 +7,6 @@ import glob
 
 @keyword2cmdline.command
 def main(logs='logs-arm', hidden="32", n_arms="9", smooth=False, ttype='test'):
-    print(logs)
     logs = glob.glob(join(logs, str(n_arms), hidden, '*'))
     print(logs)
     for log in logs:

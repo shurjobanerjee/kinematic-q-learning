@@ -9,7 +9,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/shurjo/.mujoco/mjpro150/bin
 if [ "$HOSTNAME" = lgn5 ]; then
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia-367 
 else
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia-352
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia-375
 fi
 source env/bin/activate
 
