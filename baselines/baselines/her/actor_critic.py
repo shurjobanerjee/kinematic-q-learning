@@ -26,15 +26,14 @@ class ActorCritic:
         self.g_tf  = inputs_tf['g']
         self.u_tf  = inputs_tf['u']
         self.ag_tf = inputs_tf['ag']
-
-        self.env = env.unwrapped
-
-        # End effector value
-        #end_eff = self.o_tf[...,self.env.o_ndx2:]
         
+        # Un-linearize the observation
+        self.env = env.unwrapped
+        obs_dict = self.env.reshaper.unlinearize(self.o_tf) 
+
         # Prepare inputs for actor and critic.
-        o = self.o_tf[...,:self.env.o_ndx] #self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx
-        g = self.g_tf #- end_eff #self.g_stats.normalize(self.g_tf - end_eff)
+        o = obs_dict['observation'] #self.o_stats.normalize(self.o_tf)
+        g = self.g_tf #self.g_stats.normalize(self.g_tf)
         
         input_pi = tf.concat(axis=1, values=[o, g])  # for actor
 

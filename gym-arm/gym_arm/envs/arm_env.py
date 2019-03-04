@@ -14,6 +14,8 @@ import pyglet
 import gym
 from gym import error, spaces
 from gym.utils import seeding
+from gym.envs.robotics.utils import ObsReshaper
+
 
 pyglet.clock.set_fps_limit(30)
 
@@ -50,6 +52,9 @@ class ArmEnv(gym.GoalEnv):
         self.arm_i = self.arml / n_arms
         self.arm_info[:, 0] = self.arm_i
         
+        # Consistent reshaper
+        self.reshaper = None
+        
         # Reset whhen initializing
         self.point_info = np.zeros(2)
         self.reset()
@@ -59,8 +64,6 @@ class ArmEnv(gym.GoalEnv):
 
         self.visible = visible
 
-        # Separate observations based on indices
-        self.o_ndx, self.j_dim = self.preprocess_observation_ndxs()
 
         # Required for Goal-Env
         self.action_space = spaces.Box(-1., 1., shape=(n_arms,), dtype='float32')
@@ -78,11 +81,12 @@ class ArmEnv(gym.GoalEnv):
         """Couples together observations"""
         # Actual observation
         angles = self.arm_info[:,1].copy()
-        #angles = np.cumsum(angles) #FIXME
-        #angles = np.asarray([[np.sin(a), np.cos(a)] for a in angles])
         # Additional information
         joint_lengths = self.arm_info[:, 0]
-        return angles, joint_lengths
+        # End effector 
+        return dict(observation=angles, 
+                    joint_lengths=joint_lengths, 
+                    end_eff=self.arm_info[-1,2:4].copy())
 
     def preprocess_observation_ndxs(self):
         obs, jp = self.get_shaped_observations()
@@ -185,25 +189,14 @@ class ArmEnv(gym.GoalEnv):
     def _get_obs(self):
         # Observations
         observation = self.get_shaped_observations()
-        observation = np.concatenate([o.flatten() for o in observation], 0)
+        # Linearize observation
+        if self.reshaper is None:
+            self.reshaper = ObsReshaper(**observation)
+        observation = self.reshaper.linearize(**observation)
 
-        # Global coordinates
-        if self.conn_type == 'random':
-            self.random_kinematics()
-
-        
         achieved_goal = self.arm_info[-1][2:4].copy()
         desired_goal  = self.point_info.copy()
-
-        if self.parts == 'area':
-            achieved_goal_2 = np.asarray([achieved_goal - self.arm_info[i][2:4] \
-                    for i in range(self.n_arms)]).flatten()
-            desired_goal_2  = np.asarray([desired_goal - self.arm_info[i][2:4] \
-                    for i in range(self.n_arms)]).flatten()
-
-            #achieved_goal = np.concatenate([achieved_goal, achieved_goal_2], 0)
-            #desired_goal = np.concatenate([desired_goal, desired_goal_2], 0)
-
+        
         return dict(
                 achieved_goal = achieved_goal,
                 desired_goal = desired_goal,

@@ -138,3 +138,4 @@ def reshape_for_broadcasting(source, target):
     dim = len(target.get_shape())
     shape = ([1] * (dim - 1)) + [-1]
     return tf.reshape(tf.cast(source, target.dtype), shape)
+

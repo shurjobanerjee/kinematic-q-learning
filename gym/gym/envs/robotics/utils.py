@@ -1,6 +1,7 @@
 import numpy as np
 from gym import error
 from pprint import pprint
+import tensorflow as tf
 
 try:
     import mujoco_py
@@ -168,3 +169,27 @@ def reset_mocap2body_xpos(sim):
         assert (mocap_id != -1)
         sim.data.mocap_pos[mocap_id][:] = sim.data.body_xpos[body_idx]
         sim.data.mocap_quat[mocap_id][:] = sim.data.body_xquat[body_idx]
+
+
+class ObsReshaper:
+    """Observations are sent as a vector. Reshaping it back to original form is important"""
+    def __init__(self, **kwargs):
+        self.keys       = sorted(kwargs.keys())
+        self.shapes     = {k:[-1] + list(kwargs[k].shape) for k in self.keys}
+        self.new_shapes = {k:np.prod(self.shapes[k][1:])  for k in self.keys}
+        self.ndxs       = np.cumsum([0] + [self.new_shapes[k] for k in self.keys])
+
+    def linearize(self, **kwargs):
+        obs = [np.asarray(kwargs[k]).flatten() for k in self.keys]
+        obs = np.asarray(obs).flatten()
+        return obs
+    
+    def unlinearize(self, obs):
+        """
+        Expects tensor input (i.e. batches)
+        """
+        obs_dict = {}
+        for i,k in enumerate(self.keys):
+            obs_dict[k] = tf.reshape(obs[...,self.ndxs[i-1]:self.ndxs[i]], self.shapes[k])
+        return obs_dict
+
