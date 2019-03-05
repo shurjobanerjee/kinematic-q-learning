@@ -15,6 +15,8 @@ from baselines.common.tf_util import get_session
 from baselines import logger
 from importlib import import_module
 
+#import cProfile, pstats
+
 try:
     from mpi4py import MPI
 except ImportError:
@@ -244,4 +246,9 @@ def main(args):
     return model
 
 if __name__ == '__main__':
+    #profiler = cProfile.Profile()    # create profiler
+    #profiler.enable()                # start profiling
     main(sys.argv)
+    #profiler.disable()
+    #profiler.dump_stats('baseline.prof')
+

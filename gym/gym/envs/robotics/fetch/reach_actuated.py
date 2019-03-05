@@ -5,6 +5,7 @@ from gym.envs.robotics import utils as gerutils
 from gym.envs.robotics import fetch_env
 from gym.envs.robotics.robot_env import fullpath_from_rel
 import numpy as np
+from gym.envs.robotics.utils import ObsReshaper
 
 def goal_distance_3d(goal_a, goal_b):
     #if not goal_a.shape == goal_b.shape:
@@ -19,7 +20,7 @@ MODEL_XML_PATH = os.path.join('fetch', 'reach-actuated.xml')
 class FetchReachActEnv(fetch_env.FetchEnv, utils.EzPickle):
     def __init__(self, reward_type='sparse', **kwargs):
         # Set env o_ndx
-        self.o_ndx = None
+        self.reshaper = None
 
         initial_qpos = {
             'robot0:slide0': 0.4049,
@@ -45,23 +46,31 @@ class FetchReachActEnv(fetch_env.FetchEnv, utils.EzPickle):
     def _is_success(self, achieved_goal, desired_goal):
         d = goal_distance_3d(achieved_goal, desired_goal)
         return d #(d < self.distance_threshold).astype(np.float32)
-        
-    
-    def _get_obs(self):
-        obs = super(FetchReachActEnv, self)._get_obs()
+
+
+    def get_obs_dict(self, obs_ret):
+        end_eff = obs_ret['achieved_goal'].copy()
         joint_qpos, joint_qvel, joint_jacp  = gerutils.get_joint_xposes(self.sim)
         
         # Same observation as for hand tasks
         #observation = np.concatenate((joint_qpos, joint_qvel, grip_pose), 0)
         #observation = [[np.sin(o), np.cos(o)] for o in joint_qpos]
-        observation = np.asarray([list(q) for q in zip(joint_qpos, joint_qvel)]).flatten()
-        observation = np.asarray(observation).flatten()
+        observation = np.asarray(list(zip(joint_qpos, joint_qvel)))
         
-        jacp = np.asarray(joint_jacp).flatten()
+        # Create obs dict
+        observation = dict(observation = observation,
+                           jacp = np.asarray(joint_jacp),
+                           end_eff = end_eff)
 
-        if self.o_ndx is None:
-            self.o_ndx = np.prod(observation.shape)
-            self.o_ndx2 = self.o_ndx + np.prod(jacp.shape)
+        return observation
+    
+    def _get_obs(self):
+        obs_ret = super(FetchReachActEnv, self)._get_obs()
+        obs_dict = self.get_obs_dict(obs_ret)
 
-        obs['observation'] = np.concatenate((observation, jacp), 0)
-        return obs 
+        if self.reshaper is None:
+            self.reshaper = ObsReshaper(**obs_dict)
+        obs_ret['observation'] = self.reshaper.linearize(**obs_dict)
+
+
+        return obs_ret

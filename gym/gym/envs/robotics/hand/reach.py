@@ -5,6 +5,7 @@ from gym import utils
 from gym.envs.robotics import hand_env
 from gym.envs.robotics.utils import robot_get_obs
 from gym.envs.robotics import utils as gerutils
+from gym.envs.robotics.utils import ObsReshaper
 
 
 FINGERTIP_SITE_NAMES = [
@@ -58,7 +59,7 @@ class HandReachEnv(hand_env.HandEnv, utils.EzPickle):
         self, distance_threshold=0.001, n_substeps=20, relative_control=False,
         initial_qpos=DEFAULT_INITIAL_QPOS, reward_type='sparse', **kwargs
     ):
-        self.o_ndx = None
+        self.reshaper = None
         self.distance_threshold = distance_threshold
         self.reward_type = reward_type
 
@@ -97,22 +98,26 @@ class HandReachEnv(hand_env.HandEnv, utils.EzPickle):
 
         self.initial_goal = self._get_achieved_goal().copy()
         self.palm_xpos = self.sim.data.body_xpos[self.sim.model.body_name2id('robot0:palm')].copy()
+    
+    def get_obs_dict(self):
+        robot_jacp = self._get_joint_jacp()
+        joint_qpos, joint_qvel, joint_jacp  = gerutils.get_joint_xposes(self.sim, robot_jacp)
+        observation = np.asarray(list(zip(joint_qpos, joint_qvel)))
+        end_eff = self._get_achieved_goal().ravel()
+        return dict(observation = observation,
+                    jacp        = joint_jacp,
+                    end_eff     = end_eff)
 
     def _get_obs(self):
         """
         Observations wrt to actuator
         """
-        robot_jacp = self._get_joint_jacp()
-        joint_qpos, joint_qvel, joint_jacp  = gerutils.get_joint_xposes(self.sim, robot_jacp)
-        #robot_qpos, robot_qvel = robot_get_obs(self.sim)
+        obs_dict = self.get_obs_dict()
+        if self.reshaper is None:
+            self.reshaper = ObsReshaper(**obs_dict)
+        observation = self.reshaper.linearize(**obs_dict) 
         achieved_goal = self._get_achieved_goal().ravel()
-        observation = np.asarray([list(q) for q in zip(joint_qpos, joint_qvel)]).flatten()
-        jacp = joint_jacp
-        if self.o_ndx is None:
-            self.o_ndx = np.prod(observation.shape)
-            self.o_ndx2 = self.o_ndx + np.prod(jacp.shape)
-        observation = np.concatenate((observation, jacp.flatten()))
-        
+
         # Add jacobian information
         return {
             'observation': observation.copy(),

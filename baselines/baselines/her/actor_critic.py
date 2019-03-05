@@ -27,9 +27,9 @@ class ActorCritic:
         self.u_tf  = inputs_tf['u']
         
         # Un-linearize the observation
-        self.env = env.unwrapped
-        o_normed = self.o_stats.normalize(self.o_tf)
-        obs_dict = self.env.reshaper.unlinearize(self.o_tf) 
+        self.env        = env.unwrapped
+        o_normed        = self.o_stats.normalize(self.o_tf)
+        obs_dict        = self.env.reshaper.unlinearize(self.o_tf) 
         obs_dict_normed = self.env.reshaper.unlinearize(o_normed) 
 
         # Prepare inputs for actor and critic.
@@ -64,31 +64,6 @@ def narm_reshape(x, n_arm):
     return tf.reshape(x, [-1, n_arm, x.get_shape().as_list()[-1]//n_arm])
 
 	
-def make_rot_matrix(t):
-    cosines = tf.reshape(tcos(t), [-1, 1, 1])
-    sines   = tf.reshape(tsin(t), [-1, 1, 1])
-
-    r1 = tf.concat(axis=2, values=[cosines, -sines])
-    r2 = tf.concat(axis=2, values=[sines, cosines])
-
-    R = tf.concat(axis=1, values=[r1, r2])
-    return R
-
-def compute_end_eff_pos(l, o, g, n_arms):
-    
-    # End effector posiions
-    ends = [None] * n_arms
-    armrad = 0
-    center_coord = 0
-    for i in range(n_arms):
-        armrad +=  o[:,i:i+1,0]
-        armdx_dy = tf.concat(axis=1, values = [l[:,i:i+1] * tcos(armrad), 
-                                               l[:,i:i+1] * tsin(armrad)])
-        ends[i] = center_coord + armdx_dy
-        center_coord = ends[i]
-
-    return ends[-1]
-
 class ActorCriticDiff:
     @store_args
     def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers,
@@ -138,15 +113,11 @@ class ActorCriticDiff:
         # Jacobian vals
         end_eff    = obs_dict['end_eff']
         joint_jacp = obs_dict['jacp']
-        
+
         # Outputs
         pi_tfs    = [None] * n_arms
         Q_pi_tfs  = [None] * n_arms
         Q_tfs     = [None] * n_arms
-        
-
-        # End effector value
-        #end_eff = self.o_tf[...,self.env.o_ndx2:]
         
         # Calculate the loss
         #L = tf.reduce_sum(tf.square(g-end_eff), axis=1, keepdims=True)
@@ -209,6 +180,20 @@ class ActorCriticDiff:
         total_params()
         
 
+def compute_end_eff_pos(l, o, g, n_arms):
+    
+    # End effector posiions
+    ends = [None] * n_arms
+    armrad = 0
+    center_coord = 0
+    for i in range(n_arms):
+        armrad +=  o[:,i:i+1,0]
+        armdx_dy = tf.concat(axis=1, values = [l[:,i:i+1] * tcos(armrad), 
+                                               l[:,i:i+1] * tsin(armrad)])
+        ends[i] = center_coord + armdx_dy
+        center_coord = ends[i]
+
+    return ends[-1]
 
 def solve_quadratic(l, o, g, u, o2, g2, u2, H, n):
     a   = 2*(l-1)

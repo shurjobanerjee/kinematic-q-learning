@@ -27,13 +27,6 @@ def goal_distance_2d(goal_a, goal_b):
     assert goal_a.shape == goal_b.shape
     return np.linalg.norm(goal_a - goal_b, axis=-1)
 
-def for_kin(thetas, ls):
-    """
-    Separate forward kinematics to easily take gradients wrt theta 
-    """
-    fk = np.asarray([np.sum(ls*np.cos(np.cumsum(thetas))), 
-                     np.sum(ls*np.sin(np.cumsum(thetas)))])
-    return fk
 
 def rcumsum(x):
     return np.cumsum(x[::-1])[::-1] 
@@ -45,7 +38,7 @@ class ArmEnv(gym.GoalEnv):
 
     def __init__(self, 
                  reward_type='sparse', 
-                 distance_threshold=1/20, 
+                 distance_threshold=1./20., 
                  n_arms=2, 
                  visible=True,
                  achievable=False,
@@ -91,17 +84,15 @@ class ArmEnv(gym.GoalEnv):
     def get_obs_dict(self):
         """Couples together observations"""
         # Actual observation
-        angles = self.arm_info[:,:1].copy()
+        angles = self.arm_info[:,1:2].copy()
         # Additional information
         jacp = self.jacp()
         # End effector 
+        end_eff=self.arm_info[-1,2:4].copy()
+        
         return dict(observation=angles, 
                     jacp=jacp, 
-                    end_eff=self.arm_info[-1,2:4].copy())
-
-    def preprocess_observation_ndxs(self):
-        obs, jp = self.get_obs_dict()
-        return np.prod(obs.shape), jp.shape
+                    end_eff=end_eff)
 
 
     def seed(self, seed=None):
@@ -184,8 +175,8 @@ class ArmEnv(gym.GoalEnv):
         """
         ls     = self.arm_info[:, 0]
         thetas = self.arm_info[:, 1]
-        return np.asarray([-rcumsum(ls*np.sin(rcumsum(thetas))), 
-                           rcumsum(ls*np.cos(rcumsum(thetas)))]).T
+        return np.asarray([-rcumsum(ls*np.sin(np.cumsum(thetas))), 
+                            rcumsum(ls*np.cos(np.cumsum(thetas)))]).T
     
     def reset(self):
         # Desired Goal

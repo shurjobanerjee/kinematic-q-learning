@@ -325,6 +325,7 @@ class DDPG(object):
         logger.info("Creating a DDPG agent with action space %d x %s..." % (self.dimu, self.max_u))
         self.sess = tf_util.get_session()
 
+
         # running averages
         with tf.variable_scope('o_stats') as vs:
             if reuse:
@@ -411,6 +412,10 @@ class DDPG(object):
         tf.variables_initializer(self._global_vars('')).run()
         self._sync_optimizers()
         self._init_target_net()
+        
+        ## Dump session
+        #writer = tf.summary.FileWriter("output", self.sess.graph)
+        #writer.close()
 
     def logs(self, prefix=''):
         logs = []
