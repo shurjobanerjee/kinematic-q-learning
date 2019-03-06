@@ -5,7 +5,7 @@ import mujoco_py
 from os.path import join
 
 @keyword2cmdline.command
-def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='2d', hidden=16, identifier='', normalized=False, parallel=False, **kwargs):
+def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='2d', hidden=16, identifier='', normalized=False, parallel=False, save_path=False,  **kwargs):
     
     gym_assets = "/z/home/shurjo/projects/kinematic-q-learning/gym/gym/envs/robotics/assets"
     if env == 'Fetch':
@@ -19,7 +19,7 @@ def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='
     play = "" if not play else "--play"
 
     # Differentiate the method
-    method = 'baseline' if parts is "None" else 'ours-{}'.format(parts)
+    method = 'baseline' if parts is "None" else 'our'
     relative_goals = True #True if parts is "None" else False
     method = "{}-rel_goals-{}-normalized-{}".format(method, relative_goals, normalized)
 
@@ -37,6 +37,7 @@ def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='
     # Run in parallel on lgns
     parallel = "mpirun -np 19" if parallel else ""
     num_env  = "--num_env=2" if parallel else ""
+    save_path = "{}-{}-{}.model".format(env, method, hidden) if save_path and parallel else False
 
     if env == 'Fetch':
         command = """
@@ -64,14 +65,15 @@ def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='
                    """.format(store_logs, parallel, num_timesteps, n_arms, num_env, play)
     else:
         command = """
-                   {} 
+                   {}
+                   {}
                    python -m baselines.run 
                    --alg=her 
                    --env=Arm-v0 
                    --num_timesteps={} 
                    --n_arms {} 
                    {}
-                   """.format(store_logs, num_timesteps, n_arms, play)
+                   """.format(store_logs, parallel, num_timesteps, n_arms, play)
 
     # To a normal looking sentence
     command = " ".join(command.split())
@@ -81,6 +83,8 @@ def main(num_timesteps=5000, play=False, log=True, parts='None', n_arms=2, env='
     kwargs['parts']  = parts
     kwargs['relative_goals'] = relative_goals
     kwargs['normalized'] = normalized
+    if save_path:
+        kwargs['save_path'] = save_path
     kwargs_args = ' '.join(['--{} {}'.format(k,f) for k, f in kwargs.items()])
 
     # Kwargs
