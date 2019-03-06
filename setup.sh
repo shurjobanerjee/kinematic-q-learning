@@ -6,11 +6,13 @@ export FAKETIME=-150d
 export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1:/usr/lib/x86_64-linux-gnu/libGLEW.so
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/shurjo/.mujoco/mjpro150/bin 
 
-if [ "$HOSTNAME" = lgn5 ]; then
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia-367 
-else
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia-375
-fi
+#if [ "$HOSTNAME" = lgn5 ]; then
+#	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia-367 
+#else
+#	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia-375
+#fi
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(ls -d /usr/lib/nvidia-???/ | sort -r | head -1)
+
 source env/bin/activate
 
 
