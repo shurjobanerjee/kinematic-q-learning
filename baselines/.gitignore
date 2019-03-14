@@ -38,3 +38,5 @@ MUJOCO_LOG.TXT
 models*/
 *.gif
 logs*/
+
+pbs_output/

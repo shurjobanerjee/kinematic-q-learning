@@ -39,6 +39,7 @@ class ActorCritic:
         else:
             o = tf.layers.Flatten()(obs_dict_normed['observation'])
             g = self.g_stats.normalize(self.g_tf)
+            import pdb; pdb.set_trace()
         
         input_pi = tf.concat(axis=1, values=[o, g])  # for actor
 
@@ -95,24 +96,26 @@ class ActorCriticDiff:
         
         # Un-linearize the observation
         self.env = env.unwrapped
-        o_normed = self.o_stats.normalize(self.o_tf)
+        #o_normed = self.o_stats.normalize(self.o_tf)
         obs_dict = self.env.reshaper.unlinearize(self.o_tf) 
-        obs_dict_normed = self.env.reshaper.unlinearize(o_normed) 
-
-        # Prepare inputs for actor and critic.
+        #obs_dict_normed = self.env.reshaper.unlinearize(o_normed) 
+        
+        # Normalize the gradient
         if not normalized:
             o = obs_dict['observation']
-            g = self.g_tf
+            joint_jacp = obs_dict['jacp']
         else:
             o = obs_dict_normed['observation']
-            g = self.g_stats.normalize(self.g_tf)
+            joint_jacp = obs_dict['jacp']
+
+        # Prepare inputs for actor and critic.
+        g = self.g_tf
 
         # Reshape inputs for the number of arms
         u = narm_reshape(self.u_tf, n_arms)
         
         # Jacobian vals
         end_eff    = obs_dict['end_eff']
-        joint_jacp = obs_dict['jacp']
 
         # Outputs
         pi_tfs    = [None] * n_arms
@@ -127,7 +130,18 @@ class ActorCriticDiff:
         # This gradient makes the assumption of relative gradients!!
         grad_end_eff = -2*g # analytical gradient
         gradL = tf.matmul(joint_jacp, tf.reshape(grad_end_eff, (-1, dimg, 1)))
+        #gradL = tf.stop_gradient(gradL)
+        self.gradL = gradL        
+        gradL_direct = obs_dict['jacpL']
+        self.gradL_direct = gradL_direct
+        self.grad_diff = gradL - gradL_direct
         
+        #gradL = obs_dict['jacpL']
+
+        # Set the gradient (that has been normalized)
+        #gradL = joint_jacp
+        #print(gradL.shape)
+
         ###########################
         # Solve a quadratic to get equal no of params
         ##########################

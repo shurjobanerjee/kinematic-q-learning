@@ -268,10 +268,10 @@ def main(args):
         ################################################################
         # Make a gif
         ################################################################
-        if 'save_path' in args:
-            gname = args.save_path.replace('.model','.gif')
-        elif 'load_path' in extra_args:
+        if 'load_path' in extra_args:
             gname = extra_args['load_path'].replace('.model','.gif')
+        elif 'save_path' in args:
+            gname = args.save_path.replace('.model','.gif')
         else:
             gname = 'tmp.gif'
 

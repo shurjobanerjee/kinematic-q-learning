@@ -307,8 +307,9 @@ def plot_results(
     groups = list(set(group_fn(result) for result in allresults))
 
     default_samples = 512
-    if average_group:
-        resample = resample or default_samples
+    # FIXME Why does the code resample automatically for averaging?
+    #if average_group:
+    #    resample = resample or default_samples
 
     for (isplit, sk) in enumerate(sorted(sk2r.keys())):
         g2l = {}
@@ -322,6 +323,7 @@ def plot_results(
             x, y = xy_fn(result)
             if x is None: x = np.arange(len(y))
             x, y = map(np.asarray, (x, y))
+            
             if average_group:
                 gresults[group].append((x,y))
             else:
@@ -329,6 +331,7 @@ def plot_results(
                     x, y, counts = symmetric_ema(x, y, x[0], x[-1], resample, decay_steps=smooth_step)
                 l, = ax.plot(x, y, color=COLORS[groups.index(group) % len(COLORS)])
                 g2l[group] = l
+        
         if average_group:
             for group in sorted(groups):
                 xys = gresults[group]
@@ -354,6 +357,8 @@ def plot_results(
                 ymean = np.mean(ys, axis=0)
                 ystd = np.std(ys, axis=0)
                 ystderr = ystd / np.sqrt(len(ys))
+
+                # Plot mean line + variances
                 l, = axarr[isplit][0].plot(usex, ymean, color=color)
                 g2l[group] = l
                 if shaded_err:

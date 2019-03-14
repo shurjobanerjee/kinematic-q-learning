@@ -78,7 +78,7 @@ class ArmEnv(gym.GoalEnv):
         # Observation indices required by model
 
 
-    def get_obs_dict(self):
+    def get_obs_dict(self, desired_goal, achieved_goal):
         """Couples together observations"""
         # Actual observation
         angles = self.arm_info[:,1:2].copy()
@@ -86,9 +86,11 @@ class ArmEnv(gym.GoalEnv):
         jacp = self.jacp()
         # End effector 
         end_eff=self.arm_info[-1,2:4].copy()
-        
+        # Jacp-L 
+        jacpL = self.jacpL(desired_goal, achieved_goal)
         return dict(observation=angles, 
-                    jacp=jacp, 
+                    jacp=jacp,
+                    jacpL=jacpL,
                     end_eff=end_eff)
 
 
@@ -172,8 +174,15 @@ class ArmEnv(gym.GoalEnv):
         """
         ls     = self.arm_info[:, 0]
         thetas = self.arm_info[:, 1]
-        return np.asarray([-rcumsum(ls*np.sin(np.cumsum(thetas))), 
-                            rcumsum(ls*np.cos(np.cumsum(thetas)))]).T
+        # Compute gradient wrt loss
+        dgdt = np.asarray([-rcumsum(ls*np.sin(np.cumsum(thetas))), 
+                             rcumsum(ls*np.cos(np.cumsum(thetas)))]).T
+        return dgdt
+
+    def jacpL(self, desired_goal, achieved_goal):
+        dgdt = self.jacp()
+        dLdg = np.expand_dims(-2*(desired_goal-achieved_goal), 1)
+        return np.dot(dgdt, dLdg)
     
     def reset(self):
         # Desired Goal
@@ -204,16 +213,16 @@ class ArmEnv(gym.GoalEnv):
         pyglet.clock.set_fps_limit(fps)
 
     def _get_obs(self):
+        # Achieved and desired goals
+        achieved_goal = self.arm_info[-1][2:4].copy()
+        desired_goal  = self.point_info.copy()
+        
         # Observations (includes jacobian of end-effector)
-        observation = self.get_obs_dict()
+        observation = self.get_obs_dict(desired_goal, achieved_goal)
         # Linearize observation
         if self.reshaper is None:
             self.reshaper = ObsReshaper(**observation)
         observation = self.reshaper.linearize(**observation)
-        
-        # Achieved and desired goals
-        achieved_goal = self.arm_info[-1][2:4].copy()
-        desired_goal  = self.point_info.copy()
         
         return dict(
                 achieved_goal = achieved_goal,
