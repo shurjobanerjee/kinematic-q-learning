@@ -32,6 +32,8 @@ def main(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
     method = 'baseline' if parts is 'None' else 'ours'
     if normalized:
         method = '{}-normalized={}'.format(method, normalized)
+    if identifier:
+        method = '{}={}'.format(method, identifier)
     method = '{}-{}'.format(method, seed)
 
     # Environment specifics
@@ -67,8 +69,6 @@ def main(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
         env = "{}-{}".format(env, n_arms)
 
     # Experiment identifier if provided
-    if identifier:
-        method = '{}-{}'.format(method, identifier)
 
     # Folder to store logs in
     logs = "logs/{}/{}/{}".format(env, mtype, method)
@@ -108,8 +108,9 @@ def main(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
     # To a normal looking sentence
     test_command = make_command(logs, parallel, **kwargs)
     test = make_executable_script(logs, test_command, False)
-    if not qsub:
-        subprocess.call('./{}'.format(test), shell=True)
+    #if not qsub:
+    #    subprocess.call('./{}'.format(test), shell=True,
+    #                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def make_command(logs, parallel, **kwargs):
     kwargs_args = ' '.join(['--{} {}'.format(k,f) for k, f in kwargs.items()])
@@ -140,7 +141,7 @@ PBS="""#!/bin/bash
 
 python -c "import socket; print(socket.gethostname())"
 
-cd /z/home/shurjo/projects/kinematic-q-learning/baselines
+cd {cwd}
 
 if [ ! -f ~/.mujoco ]; then
     cp -R .mujoco.dhiman/ ~/.mujoco 
@@ -149,7 +150,7 @@ fi
 
 
 def make_executable_script(logs='', command='', train=True):
-    pbs = PBS.format(jobname=basename(logs), pbs_output=logs)
+    pbs = PBS.format(jobname=basename(logs), pbs_output=logs, cwd=os.getcwd())
     sourcer = 'source {} \n'.format(abspath('../setup.sh'))
     fname = join(logs, 'train.sh' if train else 'test.sh')
     with open(fname, 'w') as f:

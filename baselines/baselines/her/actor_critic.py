@@ -39,7 +39,7 @@ class ActorCritic:
         else:
             o = tf.layers.Flatten()(obs_dict_normed['observation'])
             g = self.g_stats.normalize(self.g_tf)
-            import pdb; pdb.set_trace()
+            #g = tf.stop_gradient(g)
         
         input_pi = tf.concat(axis=1, values=[o, g])  # for actor
 
@@ -96,9 +96,9 @@ class ActorCriticDiff:
         
         # Un-linearize the observation
         self.env = env.unwrapped
-        #o_normed = self.o_stats.normalize(self.o_tf)
         obs_dict = self.env.reshaper.unlinearize(self.o_tf) 
-        #obs_dict_normed = self.env.reshaper.unlinearize(o_normed) 
+        o_normed = self.o_stats.normalize(self.o_tf)
+        obs_dict_normed = self.env.reshaper.unlinearize(o_normed) 
         
         # Normalize the gradient
         if not normalized:
@@ -113,9 +113,6 @@ class ActorCriticDiff:
 
         # Reshape inputs for the number of arms
         u = narm_reshape(self.u_tf, n_arms)
-        
-        # Jacobian vals
-        end_eff    = obs_dict['end_eff']
 
         # Outputs
         pi_tfs    = [None] * n_arms
@@ -128,15 +125,19 @@ class ActorCriticDiff:
         #grad_end_eff = tf.gradients(L, end_eff)[0]
         
         # This gradient makes the assumption of relative gradients!!
-        grad_end_eff = -2*g # analytical gradient
-        gradL = tf.matmul(joint_jacp, tf.reshape(grad_end_eff, (-1, dimg, 1)))
+        #grad_end_eff = tf.stop_gradient(-2*g) # analytical gradient
+        #gradL = tf.stop_gradient(tf.matmul(joint_jacp, tf.reshape(grad_end_eff, (-1, dimg, 1))))
         #gradL = tf.stop_gradient(gradL)
-        self.gradL = gradL        
-        gradL_direct = obs_dict['jacpL']
-        self.gradL_direct = gradL_direct
-        self.grad_diff = gradL - gradL_direct
         
-        #gradL = obs_dict['jacpL']
+        gradL = obs_dict['jacpL']
+
+        self.gradL_graph = gradL
+        self.gradL_sim   = obs_dict_normed['jacpL']
+        
+        #self.gradL = gradL        
+        #gradL_direct = obs_dict['jacpL']
+        #self.gradL_direct = gradL_direct
+        #self.grad_diff = gradL - gradL_direct
 
         # Set the gradient (that has been normalized)
         #gradL = joint_jacp

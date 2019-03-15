@@ -179,17 +179,38 @@ class ObsReshaper:
         self.new_shapes = {k:np.prod(self.shapes[k][1:])  for k in self.keys}
         self.ndxs       = np.cumsum([0] + [self.new_shapes[k] for k in self.keys])
 
-    def linearize(self, **kwargs):
-        obs = [np.asarray(kwargs[k]).flatten() for k in self.keys]
-        obs = np.concatenate(obs, 0)
+    def linearize(self, bs=None, **kwargs):
+        new_shape = -1 if bs is None else [bs, -1]
+        obs = [np.reshape(np.asarray(kwargs[k]), new_shape) for k in self.keys]
+        obs = np.concatenate(obs, -1)
         return obs
     
     def unlinearize(self, obs):
         """
         Expects tensor input (i.e. batches)
         """
+        lib = np if type(obs) is np.ndarray else tf
         obs_dict = {}
         for i,k in enumerate(self.keys):
-            obs_dict[k] = tf.reshape(obs[...,self.ndxs[i]:self.ndxs[i+1]], self.shapes[k])
+            obs_dict[k] = lib.reshape(obs[...,self.ndxs[i]:self.ndxs[i+1]], self.shapes[k])
         return obs_dict
 
+    def apply_goal_gradients(self, o, g):
+        o_shape = o.shape
+
+        #FIXME Not sure on the right place to put this operation
+        jac_key = 'jacp'
+        new_obs = self.unlinearize(o) 
+        jacpL = new_obs[jac_key]
+        lib = np if type(o) is np.ndarray else tf
+        g_func = - 2 * g #FIXME where should this be?
+        g_expanded = lib.expand_dims(g_func, 2)
+
+
+        new_jacpL2 = lib.matmul(jacpL, g_expanded)
+        new_jacpL = np.asarray([np.matmul(j,g) for j,g in zip(jacpL, g_expanded)])
+
+        # Set a different key (sneaky)
+        new_obs['jacpL'] = new_jacpL[...,0] # Janky squeeze
+
+        return lib.reshape(self.linearize(bs=o.shape[0], **new_obs), o_shape)

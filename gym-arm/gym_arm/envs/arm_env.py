@@ -83,11 +83,12 @@ class ArmEnv(gym.GoalEnv):
         # Actual observation
         angles = self.arm_info[:,1:2].copy()
         # Additional information
-        jacp = self.jacp()
+        jacp = self.jacp().copy()
         # End effector 
         end_eff=self.arm_info[-1,2:4].copy()
-        # Jacp-L 
-        jacpL = self.jacpL(desired_goal, achieved_goal)
+        # FIXME This gets the shape right but value is discarded
+        jacpL = self.jacpL(desired_goal, achieved_goal) 
+
         return dict(observation=angles, 
                     jacp=jacp,
                     jacpL=jacpL,
@@ -180,8 +181,9 @@ class ArmEnv(gym.GoalEnv):
         return dgdt
 
     def jacpL(self, desired_goal, achieved_goal):
+        """Doesn't work due to goal-resampling"""
         dgdt = self.jacp()
-        dLdg = np.expand_dims(-2*(desired_goal-achieved_goal), 1)
+        dLdg = np.ones((2,1))#np.expand_dims(2*(desired_goal-achieved_goal), 1)
         return np.dot(dgdt, dLdg)
     
     def reset(self):

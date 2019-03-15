@@ -25,7 +25,7 @@ class DDPG(object):
                  Q_lr, pi_lr, norm_eps, norm_clip, max_u, action_l2, clip_obs, scope, T,
                  rollout_batch_size, subtract_goals, relative_goals, clip_pos_returns, clip_return,
                  bc_loss, q_filter, num_demo, demo_batch_size, prm_loss_weight, aux_loss_weight,
-                 sample_transitions, gamma, reuse=False, **kwargs):
+                 sample_transitions, gamma, reuse=False, env=None, **kwargs):
         """Implementation of DDPG that is used in combination with Hindsight Experience Replay (HER).
             Added functionality to use demonstrations for training to Overcome exploration problem.
 
@@ -107,6 +107,11 @@ class DDPG(object):
         global DEMO_BUFFER
         DEMO_BUFFER = ReplayBuffer(buffer_shapes, buffer_size, self.T, self.sample_transitions) #initialize the demo buffer; in the same way as the primary data buffer
 
+        # Check if Q-learning in parts is happening
+        self.parts = kwargs['parts']
+        # Store the env for reshaping the observation
+        self.reshaper = env.unwrapped.reshaper
+        
     def _random_action(self, n):
         return np.random.uniform(low=-self.max_u, high=self.max_u, size=(n, self.dimu))
 
@@ -117,6 +122,9 @@ class DDPG(object):
             ag = ag.reshape(-1, self.dimg)
             g = self.subtract_goals(g, ag)
             g = g.reshape(*g_shape)
+
+            # FIXME Apply the gradient
+            o = self.reshaper.apply_goal_gradients(o, g) 
 
         o = np.clip(o, -self.clip_obs, self.clip_obs)
         g = np.clip(g, -self.clip_obs, self.clip_obs)
@@ -136,9 +144,6 @@ class DDPG(object):
         vals = [policy.pi_tf]
         if compute_Q:
             vals += [policy.Q_pi_tf]
-         
-        #vals += [policy.G, policy.AG, policy.g_e]
-        vals += [policy.gradL, policy.gradL_direct, policy.grad_diff]
 
         # feed
         feed = {
@@ -146,14 +151,20 @@ class DDPG(object):
             policy.g_tf : g.reshape(-1, self.dimg),
             policy.u_tf : np.zeros((o.size // self.dimo, self.dimu), dtype=np.float32)
         }
-
-        ret = self.sess.run(vals, feed_dict=feed)
         
-        # Return
-        #print('start')
-        #print(np.squeeze(ret[-3]) - np.squeeze(ret[-2]))
-        #print()
-        ret = ret[:-3] 
+        ###################
+        # Debugging (1/2)
+        debug_vals = [policy.gradL_graph, policy.gradL_sim]
+        vals += debug_vals
+        ###################
+        
+        ret = self.sess.run(vals, feed_dict=feed)
+
+        #############################
+        # Debugging (2/2)
+        gradL_graph, gradL_sim = ret[-len(debug_vals):]
+        ret = ret[:-len(debug_vals)]
+        #############################
 
         # action postprocessing
         u = ret[0]
@@ -300,6 +311,11 @@ class DDPG(object):
             batch = self.sample_batch()
         assert len(self.buffer_ph_tf) == len(batch)
         self.sess.run(self.stage_op, feed_dict=dict(zip(self.buffer_ph_tf, batch)))
+        
+        #policy = self.main
+        #ret = self.sess.run([policy.gradL_graph, policy.gradL_sim], feed_dict=dict(zip(self.buffer_ph_tf, batch)))
+        #gradL_graph, gradL_sim = ret
+
 
     def train(self, stage=True):
         if stage:
