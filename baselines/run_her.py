@@ -18,13 +18,31 @@ def makedirs(folder):
     if not os.path.isdir(folder):
         os.makedirs(folder)
 
+
+
 @keyword2cmdline.command
-def main(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
+def main(num_timesteps=30000, play=True, parts='None', n_arms=2, env='Arm',
+        hidden=16, identifier='', normalized=False, parallel=False,
+        save_path=False,  constraints=False, collisions=False, 
+        relative_goals=True, qsub=False, seeds="1,2,3,4,5", **kwargs):
+    
+    
+    seeds = map(int, seeds.split(','))
+    
+    for seed in seeds:
+        for normalized in [True, False]:
+            for parts in ["None", "diff"]:
+                run_her(num_timesteps, play, parts, n_arms, env,
+                        hidden, identifier, normalized, parallel,
+                        save_path,  constraints, collisions, 
+                        relative_goals, qsub, seed, **kwargs)
+       
+
+def run_her(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
         hidden=16, identifier='', normalized=False, parallel=False,
         save_path=False,  constraints=False, collisions=False, 
         relative_goals=True, qsub=False, seed=0, **kwargs):
-    
-    
+        
     # Constant hyperparams 
     mtype = "rel_goals-{}-hidden-{}".format(relative_goals, hidden)
     
@@ -160,6 +178,7 @@ def make_executable_script(logs='', command='', train=True):
     subprocess.call("chmod +x {}".format(fname), shell=True)
 
     return fname
+
 
 if __name__ == "__main__":
     main()

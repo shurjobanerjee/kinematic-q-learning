@@ -96,66 +96,34 @@ class ActorCriticDiff:
         
         # Un-linearize the observation
         self.env = env.unwrapped
-        obs_dict = self.env.reshaper.unlinearize(self.o_tf) 
-        o_normed = self.o_stats.normalize(self.o_tf)
-        obs_dict_normed = self.env.reshaper.unlinearize(o_normed) 
+        
+        # Reshape inputs for the number of arms
+        u = narm_reshape(self.u_tf, n_arms)
         
         # Normalize the gradient
         if not normalized:
+            obs_dict = self.env.reshaper.unlinearize(self.o_tf) 
             o = obs_dict['observation']
-            joint_jacp = obs_dict['jacp']
+            gradL = obs_dict['jacpL']
         else:
-            o = obs_dict_normed['observation']
-            joint_jacp = obs_dict['jacp']
+            o_normed = self.o_stats.normalize(self.o_tf)
+            obs_dict_normed = self.env.reshaper.unlinearize(o_normed) 
+            o     = obs_dict_normed['observation']
+            gradL = obs_dict_normed['jacpL']
 
-        # Prepare inputs for actor and critic.
-        g = self.g_tf
 
-        # Reshape inputs for the number of arms
-        u = narm_reshape(self.u_tf, n_arms)
-
+        ########################################################################
+        # Solve a quadratic to get equal no of params
+        ########################################################################
+        hidden = solve_quadratic(self.layers, self.dimo, self.dimg, self.dimu,
+                o2=o[:,0].shape.as_list()[-1], g2=1,
+                u2=u[:,0].shape.as_list()[-1], H=self.hidden, n=n_arms)-1 
+        ########################################################################
+        
         # Outputs
         pi_tfs    = [None] * n_arms
         Q_pi_tfs  = [None] * n_arms
         Q_tfs     = [None] * n_arms
-        
-        # Calculate the loss
-        #L = tf.reduce_sum(tf.square(g-end_eff), axis=1, keepdims=True)
-        # Compute the gradient of the loss using chain rule
-        #grad_end_eff = tf.gradients(L, end_eff)[0]
-        
-        # This gradient makes the assumption of relative gradients!!
-        #grad_end_eff = tf.stop_gradient(-2*g) # analytical gradient
-        #gradL = tf.stop_gradient(tf.matmul(joint_jacp, tf.reshape(grad_end_eff, (-1, dimg, 1))))
-        #gradL = tf.stop_gradient(gradL)
-        
-        gradL = obs_dict['jacpL']
-
-        self.gradL_graph = gradL
-        self.gradL_sim   = obs_dict_normed['jacpL']
-        
-        #self.gradL = gradL        
-        #gradL_direct = obs_dict['jacpL']
-        #self.gradL_direct = gradL_direct
-        #self.grad_diff = gradL - gradL_direct
-
-        # Set the gradient (that has been normalized)
-        #gradL = joint_jacp
-        #print(gradL.shape)
-
-        ###########################
-        # Solve a quadratic to get equal no of params
-        ##########################
-        l = self.layers
-        dimo = self.dimo
-        dimg = self.dimg
-        dimu = self.dimu
-        dimo2 = o[:,0].shape.as_list()[-1]
-        dimg2 = 1 #grads[:,0].shape.as_list()[-1]
-        dimu2 = u[:,0].shape.as_list()[-1]
-        H = self.hidden
-        n = n_arms
-        hidden = solve_quadratic(l, dimo, dimg, dimu, dimo2, dimg2, dimu2, H, n)-1 
         
         for i in range(n_arms):
             o_i = o[:, i]

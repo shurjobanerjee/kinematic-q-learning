@@ -154,16 +154,16 @@ class DDPG(object):
         
         ###################
         # Debugging (1/2)
-        debug_vals = [policy.gradL_graph, policy.gradL_sim]
-        vals += debug_vals
+        #debug_vals = [policy.gradL_graph, policy.gradL_sim]
+        #vals += debug_vals
         ###################
         
         ret = self.sess.run(vals, feed_dict=feed)
 
         #############################
         # Debugging (2/2)
-        gradL_graph, gradL_sim = ret[-len(debug_vals):]
-        ret = ret[:-len(debug_vals)]
+        #gradL_graph, gradL_sim = ret[-len(debug_vals):]
+        #ret = ret[:-len(debug_vals)]
         #############################
 
         # action postprocessing
