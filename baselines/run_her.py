@@ -21,7 +21,7 @@ def makedirs(folder):
 
 
 @keyword2cmdline.command
-def main(num_timesteps=30000, play=True, parts='None', n_arms=2, env='Arm',
+def main(num_timesteps=60000, play=True, parts='None', n_arms=2, env='Arm',
         hidden=16, identifier='', normalized=False, parallel=False,
         save_path=False,  constraints=False, collisions=False, 
         relative_goals=True, qsub=False, seeds="1,2,3,4,5", **kwargs):
@@ -31,7 +31,7 @@ def main(num_timesteps=30000, play=True, parts='None', n_arms=2, env='Arm',
     
     for seed in seeds:
         for normalized in [True, False]:
-            for parts in ["None", "diff"]:
+            for parts in ["diff", "None"]:
                 run_her(num_timesteps, play, parts, n_arms, env,
                         hidden, identifier, normalized, parallel,
                         save_path,  constraints, collisions, 
@@ -124,17 +124,17 @@ def run_her(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
     kwargs['num_timesteps'] = 1
 
     # To a normal looking sentence
-    test_command = make_command(logs, parallel, **kwargs)
+    test_command = make_command(None, parallel, **kwargs)
     test = make_executable_script(logs, test_command, False)
-    #if not qsub:
-    #    subprocess.call('./{}'.format(test), shell=True,
-    #                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if not qsub:
+        subprocess.call('./{}'.format(test), shell=True,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def make_command(logs, parallel, **kwargs):
     kwargs_args = ' '.join(['--{} {}'.format(k,f) for k, f in kwargs.items()])
     
     # Log only training
-    logs =  "OPENAI_LOGDIR={} OPENAI_LOG_FORMAT=csv,stdout".format(logs) if logs else ""
+    logs = "OPENAI_LOGDIR={} OPENAI_LOG_FORMAT=csv,stdout".format(logs) if logs else ""
 
     # Command to run 
     command = "DISPLAY=:0 {} {} python -m baselines.run --alg=her {}".format(\
