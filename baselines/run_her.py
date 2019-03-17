@@ -112,7 +112,7 @@ def run_her(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
     kwargs['save_path'] = save_path
     
     # To a normal looking sentence
-    train_command = make_command(logs, parallel, **kwargs)
+    train_command = make_command(logs, parallel, True, **kwargs)
     # Run the code locally or on the cluster
     print(train_command,'\n')
     train = make_executable_script(logs, train_command, True)
@@ -124,17 +124,17 @@ def run_her(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
     kwargs['num_timesteps'] = 1
 
     # To a normal looking sentence
-    test_command = make_command(logs, parallel, **kwargs)
+    test_command = make_command(logs, parallel, False, **kwargs)
     test = make_executable_script(logs, test_command, False)
     #if not qsub:
     #    subprocess.call('./{}'.format(test), shell=True,
     #                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-def make_command(logs, parallel, **kwargs):
+def make_command(logs, parallel, train, **kwargs):
     kwargs_args = ' '.join(['--{} {}'.format(k,f) for k, f in kwargs.items()])
     
     # Log only training
-    logs =  "OPENAI_LOGDIR={} OPENAI_LOG_FORMAT=csv,stdout".format(logs) if logs else ""
+    logs =  "OPENAI_LOGDIR={} OPENAI_LOG_FORMAT=csv,stdout".format(logs) if train else ""
 
     # Command to run 
     command = "DISPLAY=:0 {} {} python -m baselines.run --alg=her {}".format(\
