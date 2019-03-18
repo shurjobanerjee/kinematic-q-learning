@@ -51,7 +51,8 @@ def plot_data(exp, savefig, ttype):
                         split_fn=lambda _: '',
                         xy_fn=ep_distance_ratio_train \
                                 if ttype == 'train' else ep_distance_ratio_test,
-                        shaded_std=False)
+                        shaded_std=False,
+                        shaded_err=True)
         if os.path.isfile(savefig): os.remove(savefig)
         plt.savefig(savefig)
         plt.clf()

@@ -58,10 +58,14 @@ class FetchReachActEnv(fetch_env.FetchEnv, utils.EzPickle):
         #observation = [[np.sin(o), np.cos(o)] for o in joint_qpos]
         observation = np.asarray(list(zip(joint_qpos, joint_qvel)))
         
+        # Fake observation to place gradient
+        jacpL = np.ones((joint_jacp.shape[0], 1))
+
         # Create obs dict
         observation = dict(observation = observation,
                            jacp = np.asarray(joint_jacp),
-                           end_eff = end_eff)
+                           end_eff = end_eff,
+                           jacpL=jacpL)
 
         return observation
     

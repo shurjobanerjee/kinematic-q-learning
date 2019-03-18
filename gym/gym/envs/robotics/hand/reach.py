@@ -56,7 +56,7 @@ def goal_distance(goal_a, goal_b):
 
 class HandReachEnv(hand_env.HandEnv, utils.EzPickle):
     def __init__(
-        self, distance_threshold=0.001, n_substeps=20, relative_control=False,
+        self, distance_threshold=0.01, n_substeps=20, relative_control=False,
         initial_qpos=DEFAULT_INITIAL_QPOS, reward_type='sparse', **kwargs
     ):
         self.reshaper = None
@@ -104,9 +104,14 @@ class HandReachEnv(hand_env.HandEnv, utils.EzPickle):
         joint_qpos, joint_qvel, joint_jacp  = gerutils.get_joint_xposes(self.sim, robot_jacp)
         observation = np.asarray(list(zip(joint_qpos, joint_qvel)))
         end_eff = self._get_achieved_goal().ravel()
+        
+        # Fake placeholder for goal jacobian
+        jacpL = np.ones((joint_jacp.shape[0], 1))
+        
         return dict(observation = observation,
                     jacp        = joint_jacp,
-                    end_eff     = end_eff)
+                    end_eff     = end_eff,
+                    jacpL       = jacpL)
 
     def _get_obs(self):
         """

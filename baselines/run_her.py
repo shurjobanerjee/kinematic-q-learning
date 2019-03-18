@@ -4,6 +4,7 @@ import subprocess
 import mujoco_py
 import os
 from os.path import join, abspath, basename
+from jinja2 import Template
 
 ENVS = dict(Fetch   = 'FetchReachAct-v1',
             Fetch2D = 'FetchReachAct-v1',
@@ -20,129 +21,87 @@ def makedirs(folder):
 
 
 
-@keyword2cmdline.command
-def main(num_timesteps=30000, play=True, parts='None', n_arms=2, env='Arm',
-        hidden=16, identifier='', normalized=False, parallel=False,
-        save_path=False,  constraints=False, collisions=False, 
-        relative_goals=True, qsub=False, seeds="1,2,3,4,5", **kwargs):
-    
-    
-    seeds = map(int, seeds.split(','))
-    
-    for seed in seeds:
-        for normalized in [True, False]:
-            for parts in ["None", "diff"]:
-                run_her(num_timesteps, play, parts, n_arms, env,
-                        hidden, identifier, normalized, parallel,
-                        save_path,  constraints, collisions, 
-                        relative_goals, qsub, seed, **kwargs)
-       
 
-def run_her(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
-        hidden=16, identifier='', normalized=False, parallel=False,
-        save_path=False,  constraints=False, collisions=False, 
-        relative_goals=True, qsub=False, seed=0, **kwargs):
-        
-    # Constant hyperparams 
-    mtype = "rel_goals-{}-hidden-{}".format(relative_goals, hidden)
-    
+
+def load_xml_template(filename, **kwargs):
+    with open(filename) as file_:
+        template = Template(file_.read())
+    return template.render(**kwargs)
+
+def get_hyper_param_str(env, constraints=False, collisions=False, **kwargs):
+    # Sort kwargs for consistency
+    kwargs = dict(sorted(kwargs.items()))
+    # Collsiions/constraints placed at the end cause of Ordered Dict
+    if env != "Arm":
+        kwargs.update(constraints=constraints, collisions=collisions)
+    return format_str(**kwargs)
+
+def format_str(**kwargs):
+    output = ["{}={}".format(k, v) for k,v in kwargs.items() if v]
+    return '_'.join(output)
+
+def get_method_name(parts, normalized, identifier, seed):
+    """Name of method applied"""
     # Differentiate the method
     method = 'baseline' if parts is 'None' else 'ours'
-    if normalized:
-        method = '{}-normalized={}'.format(method, normalized)
-    if identifier:
-        method = '{}={}'.format(method, identifier)
-    method = '{}-{}'.format(method, seed)
+    method = "{}_{}-{}".format(method, \
+            format_str(normalized=normalized, identifier=identifier), seed)
+    return method
 
-    # Environment specifics
-    env_name = ENVS[env]
-
-    # Model file name changes based on params
-    model_xml_path = None
-    gym_assets = "../gym/gym/envs/robotics/assets"
-    if 'Fetch' in env:
-        if env == 'Fetch2D':
-            # Arms constrained to a plane
-            xml_name = "fetch/reach-actuated.2d.collisions_{}_constraints_{}.xml".format(\
-                                 collisions, constraints)
-            mtype = "{}-collisions={}_constraints={}".format(mtype, collisions, constraints)
-        else:
-            # Raw Fetch experiment
-            xml_name = "fetch/reach-actuated.xml"
-        
-        # Formulate the model xml path that is loaded for MujoCo
-        model_xml_path = join(gym_assets, xml_name)
-        model_xml_path = abspath(model_xml_path)
-        model = mujoco_py.load_model_from_path(model_xml_path)
-        n_arms = len(model.actuator_names)
-
-    elif env == "Hand":
-        # Hand Environment
-        model_xml_path = join(gym_assets,  "hand/reach.xml")
-        model = mujoco_py.load_model_from_path(model_xml_path)
-        n_arms = len(model.actuator_names)
-
-    else:
-        # 2D arm simulated (how many arms are used)
-        env = "{}-{}".format(env, n_arms)
-
-    # Experiment identifier if provided
-
+def get_log_dir(env, hyper_param_str, method, n_arms):
     # Folder to store logs in
-    logs = "logs/{}/{}/{}".format(env, mtype, method)
+    logs = join("logs", env, str(n_arms), hyper_param_str, method)
     makedirs(logs)
-    
-    # Run in parallel on lgns
-    parallel  = "mpirun -np 19" if parallel else ""
-    num_env   = "--num_env=2" if parallel else ""
+    return logs
 
-    # Save the model to the log folder
-    save_path = "{}/{}.model".format(logs, method)
-    
-    # Format keyword arguments for running HER
-    kwargs['seed'] = seed
-    kwargs['env'] = env_name
-    kwargs['num_timesteps'] = num_timesteps
-    kwargs['n_arms'] = n_arms
-    kwargs['hidden'] = hidden
-    kwargs['parts']  = parts
-    kwargs['relative_goals'] = relative_goals
-    kwargs['normalized'] = normalized
-    kwargs['model_xml_path'] = model_xml_path
-    kwargs['save_path'] = save_path
-    
-    # To a normal looking sentence
-    train_command = make_command(logs, parallel, True, **kwargs)
-    # Run the code locally or on the cluster
-    print(train_command,'\n')
-    train = make_executable_script(logs, train_command, True)
-    subprocess.call('{}{}'.format('qsub ' if qsub else './', train), shell=True)
-    
-    # Save test command to visualize on retinene later
-    kwargs.pop('save_path')
-    kwargs['load_path'] = save_path + " --play"
-    kwargs['num_timesteps'] = 1
+def get_model_xml_path(env, collisions, constraints):
+    ## Load Jinja templates
+    #model_file = load_xml_template(filename='sim_templates/reach-actuated.xml.jinja')
+    # Model file name changes based on params
+    if env == 'Arm':
+        return None
+    else:
+        gym_assets = "../gym/gym/envs/robotics/assets"
+        if 'Fetch' in env:
+            if env == 'Fetch2D':
+                # Arms constrained to a plane
+                xml_name = "fetch/reach-actuated.2d.collisions_{}_constraints_{}.xml".format(\
+                                     collisions, constraints)
+            else:
+                # Raw Fetch experiment
+                xml_name = "fetch/reach-actuated.xml"
+            
+            # Formulate the model xml path that is loaded for MujoCo
+            model_xml_path = join(gym_assets, xml_name)
+            model_xml_path = abspath(model_xml_path)
+            print(model_xml_path)
+            model = mujoco_py.load_model_from_path(model_xml_path)
+            n_arms = len(model.actuator_names)
 
-    # To a normal looking sentence
-    test_command = make_command(logs, parallel, False, **kwargs)
-    test = make_executable_script(logs, test_command, False)
-    #if not qsub:
-    #    subprocess.call('./{}'.format(test), shell=True,
-    #                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif env == "Hand":
+            # Hand Environment
+            model_xml_path = join(gym_assets,  "hand/reach.xml")
+            print(model_xml_path)
+            model = mujoco_py.load_model_from_path(model_xml_path)
+            n_arms = len(model.actuator_names)
+    
+        return model_xml_path
 
-def make_command(logs, parallel, train, **kwargs):
+
+def make_command(logs, train, parallel=False, **kwargs):
     kwargs_args = ' '.join(['--{} {}'.format(k,f) for k, f in kwargs.items()])
     
     # Log only training
     logs =  "OPENAI_LOGDIR={} OPENAI_LOG_FORMAT=csv,stdout".format(logs) if train else ""
 
+    # Run in parallel on lgns
+    mpi, num_env  = ("mpirun -np 19", "--num_env=2") if parallel else ("","")
+    
     # Command to run 
     command = "DISPLAY=:0 {} {} python -m baselines.run --alg=her {}".format(\
-            logs, parallel, kwargs_args)
+            logs, mpi, kwargs_args, num_env)
 
-    # Save the plots
-
-    return " ".join(command.split())
+    return command
 
 PBS="""#!/bin/bash
 #PBS -N {jobname}             # Any name to identify your job
@@ -179,6 +138,71 @@ def make_executable_script(logs='', command='', train=True):
 
     return fname
 
+def run_her(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
+        hidden=16, identifier='', normalized=False, parallel=False,
+        save_path=False,  constraints=False, collisions=False, 
+        relative_goals=True, qsub=False, seed=0, **kwargs):
+    
+    # Organize experiments by hyperparams 
+    hyper_param_str = get_hyper_param_str(env, constraints, collisions, \
+                    relative_goals=relative_goals, hidden=hidden)
+    # Get the method name
+    method = get_method_name(parts, normalized, identifier, seed)
+    # Get the directory to store results
+    logs = get_log_dir(env, hyper_param_str, method, n_arms)
+    # Model file
+    model_xml_path = get_model_xml_path(env, collisions, constraints)
+    # Save the model to the log folder
+    save_path = "{}/{}.model".format(logs, method)
+    
+    
+    # Format keyword arguments for running HER
+    kwargs.update(seed=seed, env=ENVS[env], num_timesteps=num_timesteps,
+                  n_arms=n_arms, hidden=hidden, parts=parts,
+                  relative_goals=relative_goals, normalized=normalized,
+                  model_xml_path=model_xml_path, save_path=save_path)
+    # Run the code locally or on the cluster
+    train_command = make_command(logs, True, **kwargs)
+    print(train_command,'\n')
+    train = make_executable_script(logs, train_command, True)
+    subprocess.call('{}{}'.format('qsub ' if qsub else './', train), shell=True)
+    
+    
+    # Save test command to visualize on retinene later
+    kwargs.pop('save_path')
+    kwargs['load_path'] = save_path + " --play"
+    kwargs['num_timesteps'] = 1
+    test_command = make_command(logs, False, **kwargs)
+    test = make_executable_script(logs, test_command, False)
+    if not qsub:
+        subprocess.call('./{}'.format(test), shell=True)
+                        #stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+
+
+
+@keyword2cmdline.command
+def main(num_timesteps=60000, play=True, parts='None', n_arms=2, env='Arm',
+        hidden=16, identifier='', normalized=False, parallel=False,
+        save_path=False,  constraints=False, collisions=False, 
+        relative_goals=True, qsub=False, seeds="1,2,3,4,5", debug=False, **kwargs):
+    
+    if not debug: 
+        seeds = map(int, seeds.split(','))
+        normalizeds = [True, False]
+        partss = ['diff', 'None']
+    else:
+        seeds = [0]
+        normalizeds = [True]
+        partss = ['diff']
+    
+    for seed in seeds:
+        for normalized in normalizeds:
+            for parts in partss:
+                # Runs locally or via qsub
+                run_her(num_timesteps, play, parts, n_arms, env,
+                        hidden, identifier, normalized, parallel,
+                        save_path,  constraints, collisions, 
+                        relative_goals, qsub, seed, **kwargs)
 if __name__ == "__main__":
     main()
