@@ -38,12 +38,19 @@ class ArmEnv(gym.GoalEnv):
                  distance_threshold=1./20., 
                  n_arms=2, 
                  visible=True,
-                 achievable=False,
+                 achievable=True,
                  wrapper_kwargs={},
                  conn_type=None,
                  parts=None,
-                 **kwargs):
-
+                 constraints=False,
+                **kwargs):
+        
+        # Apply angle constraints to the arm
+        self.constraints = constraints
+        if self.constraints:
+            self.constraints_low = -np.pi/2 * np.ones(n_arms)
+            self.constraints_high = np.pi/2 * np.ones(n_arms)
+        
         self.n_arms = n_arms
         self.arm_info = np.zeros((n_arms, 4))
         self.desired_info = self.arm_info.copy() if achievable==True else None
@@ -76,7 +83,6 @@ class ArmEnv(gym.GoalEnv):
         ))
 
         # Observation indices required by model
-
 
     def get_obs_dict(self, desired_goal, achieved_goal):
         """Couples together observations"""
@@ -111,9 +117,17 @@ class ArmEnv(gym.GoalEnv):
         d = goal_distance_2d(achieved_goal, desired_goal)
         return (d < self.distance_threshold).astype(np.float32)
     
-    def step(self, action,):
-        self.arm_info[:, 1] += action * self.dt
-        self.arm_info[:, 1] %= np.pi * 2
+    def step(self, action):
+        new_arm_pose = self.arm_info[:, 1] + action * self.dt
+        if self.constraints:
+            mask = np.logical_or(new_arm_pose > self.constraints_high,
+                                 new_arm_pose < self.constraints_low)
+            mask = np.where(mask)[0]
+            new_arm_pose[mask] = self.arm_info[:, 1][mask]
+
+        self.arm_info[:, 1] = new_arm_pose
+        if not self.constraints: self.arm_info[:, 1] %= np.pi * 2
+
         self.forward_kinematics()
 
         # Returns
@@ -148,7 +162,11 @@ class ArmEnv(gym.GoalEnv):
 
     def random_kinematics(self):
         # Random points that are achievable via the current arm configs
-        self.arm_info[:, 1] = 2 * np.pi * np.random.random(self.n_arms)
+        if self.constraints:
+            self.arm_info[:, 1] = (self.constraints_high - self.constraints_low) * np.random.random(self.n_arms) + self.constraints_low
+        else:
+            self.arm_info[:, 1] = np.random.random(self.n_arms) * 2 * np.pi
+
         self.forward_kinematics()
     
     def forward_kinematics(self):

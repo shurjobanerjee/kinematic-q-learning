@@ -138,7 +138,7 @@ class FetchEnv(robot_env.RobotEnv):
         self.sim.model.site_pos[site_id] = self.goal - sites_offset[0]
         self.sim.forward()
 
-    def _reset_sim(self, random_start=True):
+    def _reset_sim(self, random_start=False):
         #self.sim.set_state(self.initial_state)
         if random_start:
             sim = self.sim

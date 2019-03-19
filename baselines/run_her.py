@@ -5,6 +5,7 @@ import mujoco_py
 import os
 from os.path import join, abspath, basename
 from jinja2 import Template
+from keyword2cmdline import opts
 
 ENVS = dict(Fetch   = 'FetchReachAct-v1',
             Fetch2D = 'FetchReachAct-v1',
@@ -12,15 +13,9 @@ ENVS = dict(Fetch   = 'FetchReachAct-v1',
             Arm     = 'Arm-v0',
            )
 
-
-#echo "allocated node"; cat $PBS_NODEFILE
-#echo "GPU allocated"; cat $PBS_GPUFILE
 def makedirs(folder):
     if not os.path.isdir(folder):
         os.makedirs(folder)
-
-
-
 
 
 def load_xml_template(filename, **kwargs):
@@ -28,16 +23,16 @@ def load_xml_template(filename, **kwargs):
         template = Template(file_.read())
     return template.render(**kwargs)
 
-def get_hyper_param_str(env, constraints=False, collisions=False, **kwargs):
+def get_hyper_param_str(env, collisions=False, **kwargs):
     # Sort kwargs for consistency
     kwargs = dict(sorted(kwargs.items()))
     # Collsiions/constraints placed at the end cause of Ordered Dict
     if env != "Arm":
-        kwargs.update(constraints=constraints, collisions=collisions)
+        kwargs.update(collisions=collisions)
     return format_str(**kwargs)
 
-def format_str(**kwargs):
-    output = ["{}={}".format(k, v) for k,v in kwargs.items() if v]
+def format_str(delimiter="=", **kwargs):
+    output = ["{}{}{}".format(k, delimiter, v) for k,v in kwargs.items() if v != '']
     return '_'.join(output)
 
 def get_method_name(parts, normalized, identifier, seed):
@@ -54,34 +49,56 @@ def get_log_dir(env, hyper_param_str, method, n_arms):
     makedirs(logs)
     return logs
 
-def get_model_xml_path(env, collisions, constraints):
+
+def save_xml_file(env, collisions, constraints, n_arms, **kwargs):
+    # Save file location
+    save_to = "../gym/gym/envs/robotics/assets/fetch/"
+    fname_ext = format_str(constraints=constraints, collisions=collisions,
+                           n_arms=n_arms, delimiter='_')
+
+    # Shared file (collisions)
+    shared_filename = 'sim_templates/fetch/shared.xml.jinja'
+    shared = load_xml_template(filename=shared_filename, **kwargs)
+    new_shared_filename = "shared_{}.xml".format(fname_ext)
+    new_shared_filename = join(save_to, new_shared_filename)
+    with open(new_shared_filename, 'w') as f:
+        f.write(shared)
+
+    # Specific file (constraints)
+    robot_filename = 'sim_templates/fetch/reach-actuated.xml.jinja'
+    robot = load_xml_template(filename=robot_filename, 
+                              shared=basename(new_shared_filename), 
+                              constraints=str(constraints).lower(),
+                              n_arms=n_arms)
+    new_robot_filename = "reach-actuated_{}.xml".format(fname_ext)
+    new_robot_filename = join(save_to, new_robot_filename)
+    with open(new_robot_filename, 'w') as f:
+        f.write(robot)
+    
+    return abspath(new_robot_filename)
+
+
+
+def get_model_xml_path(env, collisions, constraints, n_arms):
     ## Load Jinja templates
     #model_file = load_xml_template(filename='sim_templates/reach-actuated.xml.jinja')
     # Model file name changes based on params
     if env == 'Arm':
         return None
     else:
-        gym_assets = "../gym/gym/envs/robotics/assets"
         if 'Fetch' in env:
-            if env == 'Fetch2D':
-                # Arms constrained to a plane
-                xml_name = "fetch/reach-actuated.2d.collisions_{}_constraints_{}.xml".format(\
-                                     collisions, constraints)
-            else:
-                # Raw Fetch experiment
-                xml_name = "fetch/reach-actuated.xml"
-            
-            # Formulate the model xml path that is loaded for MujoCo
-            model_xml_path = join(gym_assets, xml_name)
-            model_xml_path = abspath(model_xml_path)
+            # Make the shared file
+            model_xml_path = save_xml_file(env, \
+                    collisions=collisions, 
+                    constraints=constraints, 
+                    n_arms=n_arms)
             print(model_xml_path)
             model = mujoco_py.load_model_from_path(model_xml_path)
-            n_arms = len(model.actuator_names)
 
         elif env == "Hand":
             # Hand Environment
+            gym_assets = "../gym/gym/envs/robotics/assets"
             model_xml_path = join(gym_assets,  "hand/reach.xml")
-            print(model_xml_path)
             model = mujoco_py.load_model_from_path(model_xml_path)
             n_arms = len(model.actuator_names)
     
@@ -144,14 +161,15 @@ def run_her(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
         relative_goals=True, qsub=False, seed=0, **kwargs):
     
     # Organize experiments by hyperparams 
-    hyper_param_str = get_hyper_param_str(env, constraints, collisions, \
-                    relative_goals=relative_goals, hidden=hidden)
+    hyper_param_str = get_hyper_param_str(env, collisions,
+                            constraints=constraints, relative_goals=relative_goals,
+                            hidden=hidden)
     # Get the method name
     method = get_method_name(parts, normalized, identifier, seed)
     # Get the directory to store results
     logs = get_log_dir(env, hyper_param_str, method, n_arms)
     # Model file
-    model_xml_path = get_model_xml_path(env, collisions, constraints)
+    model_xml_path = get_model_xml_path(env, collisions, constraints, n_arms)
     # Save the model to the log folder
     save_path = "{}/{}.model".format(logs, method)
     
@@ -160,7 +178,8 @@ def run_her(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
     kwargs.update(seed=seed, env=ENVS[env], num_timesteps=num_timesteps,
                   n_arms=n_arms, hidden=hidden, parts=parts,
                   relative_goals=relative_goals, normalized=normalized,
-                  model_xml_path=model_xml_path, save_path=save_path)
+                  model_xml_path=model_xml_path, save_path=save_path,
+                  collisions=collisions, constraints=constraints)
     # Run the code locally or on the cluster
     train_command = make_command(logs, True, **kwargs)
     print(train_command,'\n')
@@ -182,7 +201,7 @@ def run_her(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
 
 
 @keyword2cmdline.command
-def main(num_timesteps=60000, play=True, parts='None', n_arms=2, env='Arm',
+def main(num_timesteps=15000, play=True, parts='None', n_arms=2, env='Arm',
         hidden=16, identifier='', normalized=False, parallel=False,
         save_path=False,  constraints=False, collisions=False, 
         relative_goals=True, qsub=False, seeds="1,2,3,4,5", debug=False, **kwargs):

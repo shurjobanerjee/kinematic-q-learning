@@ -43,6 +43,7 @@ def organize_results(results):
 
 
 def plot_data(exp, savefig, ttype):
+    print(exp)
     savefig = abspath(savefig)
     try:
         results = organize_results(pu.load_results(exp))
@@ -64,10 +65,12 @@ def plot_data(exp, savefig, ttype):
 def plot(logs='logs', ttype='test', smooth=False):
     envs = cglob(logs)
     for env in envs:
-        exps = cglob(env)
-        for exp in exps:
-            for ttype in ['train', 'test']:
-                plot_data(exp, '{}/{}.png'.format(exp, ttype), ttype)
+        arms = cglob(env)
+        for arm in arms:
+            exps = cglob(arm)
+            for exp in exps:
+                for ttype in ['train', 'test']:
+                    plot_data(exp, '{}/{}.png'.format(exp, ttype), ttype)
 
 def make_intuitive(filename):
     return filename.replace('/','-').replace('train.png','0-train.png').replace('test', '1-test')
