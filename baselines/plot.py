@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import keyword2cmdline
 import os
-from os.path import join, basename, abspath
+from os.path import join, basename, abspath, dirname
 import glob
 import shutil
 def makedirs(folder):
@@ -43,7 +43,6 @@ def organize_results(results):
 
 
 def plot_data(exp, savefig, ttype):
-    print(exp)
     savefig = abspath(savefig)
     try:
         results = organize_results(pu.load_results(exp))
@@ -57,7 +56,7 @@ def plot_data(exp, savefig, ttype):
         if os.path.isfile(savefig): os.remove(savefig)
         plt.savefig(savefig)
         plt.clf()
-        print("Plot saved to: {}".format(savefig))
+        #print("Plot saved to: {}".format(savefig))
     except Exception as e:
         print("Plotting failed for {}".format(savefig))
         print("Reason: {}".format(str(e)))
@@ -71,6 +70,32 @@ def plot(logs='logs', ttype='test', smooth=False):
             for exp in exps:
                 for ttype in ['train', 'test']:
                     plot_data(exp, '{}/{}.png'.format(exp, ttype), ttype)
+
+
+    ## Plot in one giant plot (easy comparison)
+    #tmp_plots = '/tmp/plots/'
+    #shutil.rmtree(tmp_plots)
+    #makedirs(tmp_plots)
+
+    #for env in envs:
+    #    arms = cglob(env)
+    #    for arm in arms:
+    #        exps = cglob(arm)
+    #        arm_dir = join(tmp_plots, basename(env), basename(arm))
+    #        makedirs(arm_dir)
+    #        for exp in exps:
+    #            methods = cglob(exp)
+    #            for method in methods:
+    #                new_dir = join(arm_dir, basename(exp) + '_' + basename(method))
+    #                #os.symlink(abspath(method), abspath(new_dir))
+    #                shutil.copytree(abspath(method), abspath(new_dir))
+    #        
+    #        import pdb; pdb.set_trace()
+    #        for ttype in ['train', 'test']:
+    #            plot_data(arm_dir, '{}/{}.png'.format(arm_dir, ttype), ttype)
+    #
+    #import pdb; pdb.set_trace()
+
 
 def make_intuitive(filename):
     return filename.replace('/','-').replace('train.png','0-train.png').replace('test', '1-test')

@@ -94,7 +94,7 @@ class RobotEnv(gym.GoalEnv):
     def render(self, mode='human'):
         self._render_callback()
         if mode == 'rgb_array':
-            self._get_viewer().render()
+            self._get_viewer().render(1920,1080)
             # window size used for old mujoco-py:
             #width, height = 500, 500
             width, height = 1920, 1080
@@ -106,7 +106,9 @@ class RobotEnv(gym.GoalEnv):
 
     def _get_viewer(self):
         if self.viewer is None:
-            self.viewer = mujoco_py.MjViewer(self.sim)
+            #import pdb; pdb.set_trace()
+            #self.viewer = mujoco_py.MjViewer(self.sim)
+            self.viewer = mujoco_py.MjRenderContextOffscreen(self.sim)
             self._viewer_setup()
         return self.viewer
 

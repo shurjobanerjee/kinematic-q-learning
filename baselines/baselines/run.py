@@ -229,11 +229,12 @@ def main(args):
         dones = np.zeros((1,))
         
         num_eps = 0
+        max_eps = 20
         episode_rew = 0
         images = []
         downsize = True
         iterator = -1
-        while num_eps < 30: #True:
+        while num_eps < max_eps: #True:
             iterator += 1
             if state is not None:
                 actions, _, state, _ = model.step(obs,S=state, M=dones)
@@ -242,8 +243,8 @@ def main(args):
 
             obs, rew, done, _ = env.step(actions)
             episode_rew += rew[0]
-            env.render()
-
+            #env.render()
+            
             image = env.render('rgb_array')
             
             #FIXME Convert ColorBuffer object to numpy array directly 
@@ -276,10 +277,10 @@ def main(args):
             gname = 'tmp.gif'
 
         if downsize:
-            images = [cv2.resize(i, None, fx=.25, fy=.25) for i in images]
+            images = [cv2.resize(i, None, fx=.5, fy=.5) for i in images]
         
         # Save the gif at a frame rate of 30
-        print("Saving a gif to: {}".format(gname))
+        print("Saving a gif to: {}".format(osp.abspath(gname)))
         imageio.mimsave(gname, images,duration=1/30.)
 
     env.close()

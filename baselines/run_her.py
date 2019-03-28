@@ -6,6 +6,8 @@ import os
 from os.path import join, abspath, basename
 from jinja2 import Template
 from keyword2cmdline import opts
+import sys
+import socket
 
 ENVS = dict(Fetch   = 'FetchReachAct-v1',
             Fetch2D = 'FetchReachAct-v1',
@@ -40,12 +42,16 @@ def get_method_name(parts, normalized, identifier, seed):
     # Differentiate the method
     method = 'baseline' if parts is 'None' else 'ours'
     method = "{}_{}-{}".format(method, \
-            format_str(normalized=normalized, identifier=identifier), seed)
+            format_str(normalized=normalized), seed)
     return method
 
 def get_log_dir(env, hyper_param_str, method, n_arms):
     # Folder to store logs in
-    logs = join("logs", env, str(n_arms), hyper_param_str, method)
+    if False: #socket.gethostname() == "retinene":
+        log_folder = "logs-retinene"
+    else:
+        log_folder = "logs"
+    logs = join(log_folder, env, str(n_arms), hyper_param_str, method)
     makedirs(logs)
     return logs
 
@@ -105,31 +111,17 @@ def get_model_xml_path(env, collisions, constraints, n_arms):
         return model_xml_path
 
 
-def make_command(logs, train, parallel=False, **kwargs):
-    kwargs_args = ' '.join(['--{} {}'.format(k,f) for k, f in kwargs.items()])
-    
-    # Log only training
-    logs =  "OPENAI_LOGDIR={} OPENAI_LOG_FORMAT=csv,stdout".format(logs) if train else ""
-
-    # Run in parallel on lgns
-    mpi, num_env  = ("mpirun -np 19", "--num_env=2") if parallel else ("","")
-    
-    # Command to run 
-    command = "DISPLAY=:0 {} {} python -m baselines.run --alg=her {}".format(\
-            logs, mpi, kwargs_args, num_env)
-
-    return command
 
 PBS="""#!/bin/bash
 #PBS -N {jobname}             # Any name to identify your job
 #PBS -j oe                    # Join error and output files for convinience
 #PBS -l walltime=200:00:00    # Keep walltime big enough to finish the job
-#PBS -l nodes=1:ppn=10:gpus=1 # nodes requested: Processor per node: gpus requested
+#PBS -l nodes=1:ppn=10 # nodes requested: Processor per node: gpus requested
 #PBS -S /bin/bash             # Shell to use
 #PBS -m abe                   # Mail to <user>@umich.edu on abort, begin and end
 #PBS -V                       # Pass current environment variables to the script
-#PBS -e {pbs_output}
-#PBS -o {pbs_output}
+#PBS -e pbs_output
+#PBS -o pbs_output
 
 #echo "allocated node"; cat $PBS_NODEFILE
 
@@ -137,15 +129,18 @@ python -c "import socket; print(socket.gethostname())"
 
 cd {cwd}
 
-if [ ! -f ~/.mujoco ]; then
-    cp -R .mujoco.dhiman/ ~/.mujoco 
-fi
+#if [ ! -f ~/.mujoco ]; then
+#    cp -R .mujoco.dhiman/ ~/.mujoco 
+#fi
 """
 
 
-def make_executable_script(logs='', command='', train=True):
+def make_executable_script(logs='', command='', train=True, mode='human'):
     pbs = PBS.format(jobname=basename(logs), pbs_output=logs, cwd=os.getcwd())
     sourcer = 'source {} \n'.format(abspath('../setup.sh'))
+    if mode == 'human':
+        sourcer += "export LD_PRELOAD=$LD_PRELOAD:/usr/lib/x86_64-linux-gnu/libGLEW.so\n"
+
     fname = join(logs, 'train.sh' if train else 'test.sh')
     with open(fname, 'w') as f:
         f.write(pbs)
@@ -158,12 +153,16 @@ def make_executable_script(logs='', command='', train=True):
 def run_her(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
         hidden=16, identifier='', normalized=False, parallel=False,
         save_path=False,  constraints=False, collisions=False, 
-        relative_goals=True, qsub=False, seed=0, **kwargs):
+        relative_goals=True, qsub=False, seed=0, stdout=sys.stdout, stderr=sys.stderr,
+        mode='rgb_array', **kwargs):
     
     # Organize experiments by hyperparams 
     hyper_param_str = get_hyper_param_str(env, collisions,
                             constraints=constraints, relative_goals=relative_goals,
                             hidden=hidden)
+    if identifier: 
+        hyper_param_str = "{}_{}".format(hyper_param_str, identifier)
+
     # Get the method name
     method = get_method_name(parts, normalized, identifier, seed)
     # Get the directory to store results
@@ -178,50 +177,83 @@ def run_her(num_timesteps=5000, play=True, parts='None', n_arms=2, env='Arm',
     kwargs.update(seed=seed, env=ENVS[env], num_timesteps=num_timesteps,
                   n_arms=n_arms, hidden=hidden, parts=parts,
                   relative_goals=relative_goals, normalized=normalized,
-                  model_xml_path=model_xml_path, save_path=save_path,
-                  collisions=collisions, constraints=constraints)
-    # Run the code locally or on the cluster
+                  model_xml_path=model_xml_path, collisions=collisions,
+                  constraints=constraints, mode=mode, play=play)
+
+    # Training
+    kwargs['save_path'] = save_path
     train_command = make_command(logs, True, **kwargs)
-    print(train_command,'\n')
-    train = make_executable_script(logs, train_command, True)
-    subprocess.call('{}{}'.format('qsub ' if qsub else './', train), shell=True)
-    
-    
-    # Save test command to visualize on retinene later
+    train = make_executable_script(logs, train_command, True, mode)
+    subprocess.call('{}{}'.format('qsub ' if qsub else './', train), shell=True,
+                        stdout=stdout, stderr=stderr)
+
+    # Save test command for model-based visualization if required
     kwargs.pop('save_path')
-    kwargs['load_path'] = save_path + " --play"
+    kwargs['load_path'] = save_path
+
+    # Testing
     kwargs['num_timesteps'] = 1
     test_command = make_command(logs, False, **kwargs)
-    test = make_executable_script(logs, test_command, False)
-    if not qsub:
-        subprocess.call('./{}'.format(test), shell=True)
-                        #stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    test = make_executable_script(logs, test_command, False, mode)
+    #if not qsub:
+    #    subprocess.call('./{}'.format(test), shell=True,
+    #                    stdout=stdout, stderr=stderr)
 
 
+def make_command(logs, train, parallel=False, play=False, **kwargs):
+    kwargs_args = ' '.join(['--{} {}'.format(k,f) for k, f in kwargs.items()])
+    
+    # Log only training
+    logs =  "OPENAI_LOGDIR={} OPENAI_LOG_FORMAT=csv,stdout".format(logs) if train else ""
+
+    # Run in parallel on lgns
+    mpi, num_env  = ("mpirun -np 19", "--num_env=2") if parallel else ("","")
+
+    # Play command
+    play = "--play" if play else ""
+    
+    # Command to run 
+    command = "{} {} python -m baselines.run --alg=her {} {} {}".format(\
+            logs, mpi, kwargs_args, num_env, play)
+
+    return command
 
 
 @keyword2cmdline.command
 def main(num_timesteps=15000, play=True, parts='None', n_arms=2, env='Arm',
         hidden=16, identifier='', normalized=False, parallel=False,
         save_path=False,  constraints=False, collisions=False, 
-        relative_goals=True, qsub=False, seeds="1,2,3,4,5", debug=False, **kwargs):
+        relative_goals=True, qsub=False, seeds="0", debug=False, 
+        verbose = True, **kwargs):
     
-    if not debug: 
-        seeds = map(int, seeds.split(','))
-        normalizeds = [True, False]
-        partss = ['diff', 'None']
-    else:
-        seeds = [0]
-        normalizeds = [True]
-        partss = ['diff']
+    seeds = list(map(int, seeds.split(',')))
+    normalizeds = [True, False]
+    partss = ['diff', 'None']
+    if debug:
+        seeds, normalizeds, partss = map(lambda x: x[0:1], [seeds, normalizeds, partss])
     
+    if not verbose:
+        stdout = sys.stdout
+        null = open(os.devnull, 'w')
+
+    counter = 1
+    total   = len(seeds) * len(normalizeds) * len(partss)
     for seed in seeds:
         for normalized in normalizeds:
             for parts in partss:
+                if not verbose:
+                    sys.stdout = stdout
+                    sys.stderr = stdout
+                    print("{}/{}".format(counter, total))
+                    counter += 1
+                    sys.stdout = null
+                    sys.stderr = null
+
                 # Runs locally or via qsub
                 run_her(num_timesteps, play, parts, n_arms, env,
                         hidden, identifier, normalized, parallel,
                         save_path,  constraints, collisions, 
-                        relative_goals, qsub, seed, **kwargs)
+                        relative_goals, qsub, seed, stdout=sys.stdout, 
+                        stderr=sys.stderr, **kwargs)
 if __name__ == "__main__":
     main()

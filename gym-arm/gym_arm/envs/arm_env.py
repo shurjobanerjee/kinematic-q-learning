@@ -48,8 +48,8 @@ class ArmEnv(gym.GoalEnv):
         # Apply angle constraints to the arm
         self.constraints = constraints
         if self.constraints:
-            self.constraints_low = -np.pi/2 * np.ones(n_arms)
-            self.constraints_high = np.pi/2 * np.ones(n_arms)
+            self.constraints_low = -np.pi/6 * np.ones(n_arms)
+            self.constraints_high = np.pi/6 * np.ones(n_arms)
         
         self.n_arms = n_arms
         self.arm_info = np.zeros((n_arms, 4))
@@ -92,13 +92,16 @@ class ArmEnv(gym.GoalEnv):
         jacp = self.jacp().copy()
         # End effector 
         end_eff=self.arm_info[-1,2:4].copy()
+        
         # FIXME This gets the shape right but value is discarded
         jacpL = self.jacpL(desired_goal, achieved_goal) 
+        loss  = np.ones(1)
 
         return dict(observation=angles, 
                     jacp=jacp,
                     jacpL=jacpL,
-                    end_eff=end_eff)
+                    end_eff=end_eff,
+                    loss=loss)
 
 
     def seed(self, seed=None):
@@ -195,7 +198,7 @@ class ArmEnv(gym.GoalEnv):
         thetas = self.arm_info[:, 1]
         # Compute gradient wrt loss
         dgdt = np.asarray([-rcumsum(ls*np.sin(np.cumsum(thetas))), 
-                             rcumsum(ls*np.cos(np.cumsum(thetas)))]).T
+                            rcumsum(ls*np.cos(np.cumsum(thetas)))]).T
         return dgdt
 
     def jacpL(self, desired_goal, achieved_goal):

@@ -39,7 +39,7 @@ class ActorCritic:
         else:
             o = tf.layers.Flatten()(obs_dict_normed['observation'])
             g = self.g_stats.normalize(self.g_tf)
-            #g = tf.stop_gradient(g)
+            #g = tf.stopgradient(g)
         
         input_pi = tf.concat(axis=1, values=[o, g])  # for actor
 
@@ -64,6 +64,8 @@ class ActorCritic:
 def narm_reshape(x, n_arm):
     return tf.reshape(x, [-1, n_arm, x.get_shape().as_list()[-1]//n_arm])
 
+def calculate_loss(g):
+    return tf.reduce_sum(tf.square(g))
 	
 class ActorCriticDiff:
     @store_args
@@ -87,6 +89,11 @@ class ActorCriticDiff:
         self.o_tf  = inputs_tf['o']
         self.g_tf  = inputs_tf['g']
         self.u_tf  = inputs_tf['u']
+
+        # Calculate the gradients of g prior to normalization
+        loss = calculate_loss(self.g_tf)
+        dl_dg = tf.gradients(loss, self.g_tf)
+        import pdb; pdb.set_trace()
         
         # Access to the environment type 
         self.env = env.unwrapped
@@ -100,24 +107,26 @@ class ActorCriticDiff:
         # Reshape inputs for the number of arms
         u = narm_reshape(self.u_tf, n_arms)
         
-        # Normalize the gradient
-        if not normalized:
-            obs_dict = self.env.reshaper.unlinearize(self.o_tf) 
-            o = obs_dict['observation']
-            gradL = obs_dict['jacpL']
-        else:
-            o_normed = self.o_stats.normalize(self.o_tf)
-            obs_dict_normed = self.env.reshaper.unlinearize(o_normed) 
-            o     = obs_dict_normed['observation']
-            gradL = obs_dict_normed['jacpL']
+        # Normalize the observations and gradients
+        observations = self.o_tf
+        if normalized:
+            observations = self.o_stats.normalize(observations)
+        
+        # Extract observations specifics
+        obs_dict = self.env.reshaper.unlinearize(observations) 
+        o = obs_dict['observation']
+        gradL = [obs_dict['jacp{}'.format(i)] for i in range(n_arms)]
 
+
+        import pdb; pdb.set_trace()
 
         ########################################################################
-        # Solve a quadratic to get equal no of params
+        # Solve a quadratic to get equal no of params #FIXME not working right
         ########################################################################
         hidden = solve_quadratic(self.layers, self.dimo, self.dimg, self.dimu,
                 o2=o[:,0].shape.as_list()[-1], g2=1,
                 u2=u[:,0].shape.as_list()[-1], H=self.hidden, n=n_arms)-1 
+        
         ########################################################################
         
         # Outputs
@@ -126,13 +135,13 @@ class ActorCriticDiff:
         Q_tfs     = [None] * n_arms
         
         for i in range(n_arms):
+            # Observataions and actions
             o_i = o[:, i]
             u_i = u[:, i]
             
             # Differentiation chain for method
-            #g_i = tf.reduce_sum(grad_end_eff * joint_jacp[:,i], 1, keepdims=True)
-            g_i = gradL[:,i]
-
+            g_i = gradL[i]
+            
             # Input Pi
             input_pis_i = tf.concat(axis=1, values=[o_i, g_i])
             
@@ -205,85 +214,3 @@ def total_params():
         total_parameters += variable_parameters
     print("Total Params: {}".format(total_parameters))
 
-#class ActorCriticAll:
-#    @store_args
-#    def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers, env=None, n_arms=None, **kwargs):
-#        """The actor-critic network and related training code.
-#
-#        Args:
-#            inputs_tf (dict of tensors): all necessary inputs for the network: the
-#                observation (o), the goal (g), and the action (u)
-#            dimo (int): the dimension of the observations
-#            dimg (int): the dimension of the goals
-#            dimu (int): the dimension of the actions
-#            max_u (float): the maximum magnitude of actions; action outputs will be scaled
-#                accordingly
-#            o_stats (baselines.her.Normalizer): normalizer for observations
-#            g_stats (baselines.her.Normalizer): normalizer for goals
-#            hidden (int): number of hidden units that should be used in hidden layers
-#            layers (int): number of hidden layers
-#        """
-#        self.o_tf  = inputs_tf['o']
-#        self.g_tf  = inputs_tf['g']
-#        self.u_tf  = inputs_tf['u']
-#        self.ag_tf = inputs_tf['ag']
-#
-#        # Un-linearize the observation
-#        self.env = env.unwrapped
-#        obs_dict = self.env.reshaper.unlinearize(self.o_tf) 
-#
-#        # End effector value
-#        end_eff = obs_dict['end_eff']
-#        
-#        # Actual observation
-#        o = obs_dict['observation']
-#        # Prepare inputs for actor and critic.
-#        #o = self.o_stats.normalize(self.o_tf)[...,:self.env.o_ndx]
-#        #g = self.g_stats.normalize(self.g_tf)
-#        o = self.o_tf[...,:self.env.o_ndx]
-#        #g = self.g_tf 
-#        #o = self.o_tf[...,:self.env.o_ndx]
-#        
-#        # Jacobian vals
-#        # Calculate the loss
-#        joint_jacp = self.o_tf[...,self.env.o_ndx:self.env.o_ndx2]
-#        joint_jacp = narm_reshape(joint_jacp, n_arms)
-#        
-#        #L = tf.reduce_sum(tf.square(g_old-end_eff), axis=1, keepdims=True)
-#        # Compute the gradient of the loss using chain rule
-#        #grad_end_eff = tf.gradients(L, end_eff)[0]
-#        #gradL = tf.matmul(joint_jacp, tf.reshape(grad_end_eff, (-1, 3, 1)))
-#        #g = gradL[...,0]
-#        
-#        # Analytical gradient
-#        grad_end_eff = -2*self.g_tf
-#        gradL = tf.matmul(joint_jacp, tf.reshape(grad_end_eff, (-1, 3, 1)))
-#
-#        g = gradL
-#
-#
-#        
-#        #self.g_diff = g - end_eff
-#        
-#        input_pi = tf.concat(axis=1, values=[o, g])  # for actor
-#        
-#
-#        # Networks.
-#        with tf.variable_scope('pi'):
-#            self.pi_tf = self.max_u * tf.tanh(nn(
-#                input_pi, [self.hidden] * self.layers + [self.dimu]))
-#        
-#        
-#        with tf.variable_scope('Q'):
-#            # for policy training
-#            input_Q = tf.concat(axis=1, values=[o, g, self.pi_tf / self.max_u])
-#            self.Q_pi_tf = nn(input_Q, [self.hidden] * self.layers + [1])
-#            # for critic training
-#            input_Q = tf.concat(axis=1, values=[o, g, self.u_tf / self.max_u])
-#            self._input_Q = input_Q  # exposed for tests
-#            self.Q_tf = nn(input_Q, [self.hidden] * self.layers + [1], reuse=True)
-#
-#        total_params()
-#        
-#        # Calculation of total params
-#        #tp = 2*(self.layers-1)*self.hidden*self.hidden + (2*(dimo + self.dimg + self.dimu + self.layers) + 1)*self.hidden + self.dimu + 1

@@ -34,7 +34,13 @@ def train(*, policy, rollout_worker, evaluator,
 
     if policy.bc_loss == 1: policy.init_demo_buffer(demo_file) #initialize demo buffer if training with demonstrations
 
-    # test
+    # Keep track of epochs for action sampling
+    num_timesteps = n_epochs * n_cycles * n_batches #rollout_length * number of rollout workers
+    policy.set_timesteps(num_timesteps)
+    counter = 0
+    policy.update_epoch(counter) # Update the epoch counter for random action
+
+    # Log test data (before training)
     evaluator.clear_history()
     for _ in range(n_test_rollouts):
         evaluator.generate_rollouts()
@@ -44,7 +50,6 @@ def train(*, policy, rollout_worker, evaluator,
     if rank == 0:
         logger.dump_tabular()
 
-    # num_timesteps = n_epochs * n_cycles * rollout_length * number of rollout workers
     for epoch in range(1, n_epochs+1):
         # train
         rollout_worker.clear_history()
@@ -52,6 +57,8 @@ def train(*, policy, rollout_worker, evaluator,
             episode = rollout_worker.generate_rollouts()
             policy.store_episode(episode)
             for _ in range(n_batches):
+                counter += 1
+                policy.update_epoch(counter) # Update the epoch counter for random action
                 policy.train()
             policy.update_target_net()
 

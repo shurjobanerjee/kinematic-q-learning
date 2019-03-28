@@ -25,7 +25,7 @@ class DDPG(object):
                  Q_lr, pi_lr, norm_eps, norm_clip, max_u, action_l2, clip_obs, scope, T,
                  rollout_batch_size, subtract_goals, relative_goals, clip_pos_returns, clip_return,
                  bc_loss, q_filter, num_demo, demo_batch_size, prm_loss_weight, aux_loss_weight,
-                 sample_transitions, gamma, reuse=False, env=None, **kwargs):
+                 sample_transitions, gamma, reuse=False, env=None, epoch=None, annealed_actions=False, **kwargs):
         """Implementation of DDPG that is used in combination with Hindsight Experience Replay (HER).
             Added functionality to use demonstrations for training to Overcome exploration problem.
 
@@ -72,6 +72,9 @@ class DDPG(object):
         self.dimo = self.input_dims['o']
         self.dimg = self.input_dims['g']
         self.dimu = self.input_dims['u']
+        
+        # Actions annealed as a function of timestep
+        self.annealed_actions = annealed_actions
 
         # Prepare staging area for feeding data to the model.
         stage_shapes = OrderedDict()
@@ -107,21 +110,31 @@ class DDPG(object):
         global DEMO_BUFFER
         DEMO_BUFFER = ReplayBuffer(buffer_shapes, buffer_size, self.T, self.sample_transitions) #initialize the demo buffer; in the same way as the primary data buffer
 
-        # Check if Q-learning in parts is happening
+        # Check if Q-learning in parts is happening / FIXME keeps in kwargs for actor/critic
         self.parts = kwargs['parts']
         # Store the env for reshaping the observation
         self.reshaper = env.unwrapped.reshaper
-        
-    def _random_action(self, n):
-        return np.random.uniform(low=-self.max_u, high=self.max_u, size=(n, self.dimu))
+
+    def set_timesteps(self, num_timesteps):
+        self.num_timesteps = num_timesteps
+
+    def update_epoch(self, iteration):
+        self.iteration = iteration
+
+    def _random_action(self, n, random_eps):
+        if not self.annealed_actions or random_eps == 0:
+            max_u = self.max_u
+        else:
+            max_u = max((1-self.iteration/self.num_timesteps) * self.max_u, .01*self.max_u)
+        return np.random.uniform(low=-max_u, high=max_u, size=(n, self.dimu))
 
     def _preprocess_og(self, o, ag, g):
         if self.relative_goals:
             g_shape = g.shape
-            g = g.reshape(-1, self.dimg)
+            g  =  g.reshape(-1, self.dimg)
             ag = ag.reshape(-1, self.dimg)
-            g = self.subtract_goals(g, ag)
-            g = g.reshape(*g_shape)
+            g  = self.subtract_goals(g, ag)
+            g  =  g.reshape(*g_shape)
 
             # FIXME Apply the gradient
             o = self.reshaper.apply_goal_gradients(o, g) 
@@ -131,7 +144,9 @@ class DDPG(object):
         return o, g
 
     def step(self, obs):
-        actions = self.get_actions(obs['observation'], obs['achieved_goal'], obs['desired_goal'])
+        actions = self.get_actions(obs['observation'], 
+                                   obs['achieved_goal'], 
+                                   obs['desired_goal'])
         return actions, None, None, None
 
 
@@ -171,7 +186,7 @@ class DDPG(object):
         noise = noise_eps * self.max_u * np.random.randn(*u.shape)  # gaussian noise
         u += noise
         u = np.clip(u, -self.max_u, self.max_u)
-        u += np.random.binomial(1, random_eps, u.shape[0]).reshape(-1, 1) * (self._random_action(u.shape[0]) - u)  # eps-greedy
+        u += np.random.binomial(1, random_eps, u.shape[0]).reshape(-1, 1) * (self._random_action(u.shape[0], random_eps) - u)  # eps-greedy
         if u.shape[0] == 1:
             u = u[0]
         u = u.copy()

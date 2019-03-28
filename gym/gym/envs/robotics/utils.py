@@ -63,21 +63,28 @@ def rotmat(theta_y):
 def get_jacp(sim):
     return sim.data.get_site_jacp('robot0:grip').copy().reshape((3,-1)).T
 
-def get_joint_xposes(sim, jacp=None):
+def get_joint_xposes(sim, jacp=None, jacv=None):
     
     joint_jacobians_all = jacp if jacp is not None else get_jacp(sim) 
-    
     joint_qpos, joint_qvel, joint_jacps = [], [], []
+    
+    np.set_printoptions(precision=4)
+
     for i in range(len(sim.model.actuator_names)):
         jidx = sim.model.actuator_trnid[i, 0]
         qposidx = sim.model.jnt_qposadr[jidx]
         jacobian = joint_jacobians_all[qposidx]
 
+        #pprint((qposidx, sim.model.actuator_names[i], sim.model.joint_names[qposidx]))
+        #pprint(jacobian)
+
         joint_qpos.append(sim.data.qpos[qposidx])
         joint_qvel.append(sim.data.qvel[qposidx])
         joint_jacps.append(jacobian)
+
+    #import pdb; pdb.set_trace()
     
-    return [np.asarray(x) for x in [joint_qpos, joint_qvel, joint_jacps]]
+    return map(np.asarray, [joint_qpos, joint_qvel, joint_jacps])
 
 def robot_get_obs(sim):
     """Returns all joint positions and velocities associated with
@@ -173,11 +180,18 @@ def reset_mocap2body_xpos(sim):
 
 class ObsReshaper:
     """Observations are sent as a vector. Reshaping it back to original form is important"""
-    def __init__(self, **kwargs):
+    def __init__(self, env='Hand', **kwargs):
         self.keys       = sorted(kwargs.keys())
         self.shapes     = {k:[-1] + list(kwargs[k].shape) for k in self.keys}
         self.new_shapes = {k:np.prod(self.shapes[k][1:])  for k in self.keys}
         self.ndxs       = np.cumsum([0] + [self.new_shapes[k] for k in self.keys])
+        self.env = env
+        
+        # Store average gradients
+        self.avg_grads = None
+    
+    def reset(self):
+        self.avg_grads = None
 
     def linearize(self, bs=None, **kwargs):
         new_shape = -1 if bs is None else [bs, -1]
@@ -195,6 +209,7 @@ class ObsReshaper:
             obs_dict[k] = lib.reshape(obs[...,self.ndxs[i]:self.ndxs[i+1]], self.shapes[k])
         return obs_dict
 
+
     def apply_goal_gradients(self, o, g):
         o_shape = o.shape
 
@@ -203,14 +218,53 @@ class ObsReshaper:
         new_obs = self.unlinearize(o) 
         jacpL = new_obs[jac_key]
         lib = np if type(o) is np.ndarray else tf
-        g_func = - 2 * g #FIXME where should this be?
-        g_expanded = lib.expand_dims(g_func, 2)
+        
+        # Replace the gradient value
+        grads = compute_grads(g, jacpL)
+        new_obs.update(grads)
 
-
-        new_jacpL2 = lib.matmul(jacpL, g_expanded)
-        new_jacpL = np.asarray([np.matmul(j,g) for j,g in zip(jacpL, g_expanded)])
-
-        # Set a different key (sneaky)
-        new_obs['jacpL'] = new_jacpL[...,0] # Janky squeeze
+        # FIXME Replace loss value
+        new_obs['loss'] = np.linalg.norm(g, axis=1)
 
         return lib.reshape(self.linearize(bs=o.shape[0], **new_obs), o_shape)
+
+
+def goal_reshape(x, env='Hand', lib=np):
+    if env != 'Hand':
+        return x
+    else:
+        return x.reshape(x.shape[0], x.shape[1], 5, 3)
+
+MASK = \
+[[  True,  True,  True,  True,  True],
+  [ True,  True,  True,  True,  True],
+  [ True, False, False, False, False],
+  [ True, False, False, False, False],
+  [ True, False, False, False, False],
+  [False,  True, False, False, False],
+  [False,  True, False, False, False],
+  [False,  True, False, False, False],
+  [False, False,  True, False, False],
+  [False, False,  True, False, False],
+  [False, False,  True, False, False],
+  [False, False, False,  True, False],
+  [False, False, False,  True, False],
+  [False, False, False,  True, False],
+  [False, False, False,  True, False],
+  [False, False, False, False,  True],
+  [False, False, False, False,  True],
+  [False, False, False, False,  True],
+  [False, False, False, False,  True],
+  [False, False, False, False,  True],]
+
+
+def compute_grads(g, jacpL,lib=np):
+    g_func = - 2 * g #FIXME where should this be?
+    new_jacpL2 = goal_reshape((jacpL * lib.expand_dims(g_func, 1)), lib=lib).sum(-1)
+    #return new_jacpL2
+    grads = dict()
+    for i,m in enumerate(MASK):
+        ndxs = np.where(m)[0]
+        grads['jacp{}'.format(i)] = new_jacpL2[:, i, ndxs]
+    return grads
+    
